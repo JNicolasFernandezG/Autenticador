@@ -1,0 +1,42 @@
+version: "3.9"
+
+# Contenedor de Aplicación del Autenticador (Backend + Frontend Admin)
+# Se conecta a la red externa `autenticador_net` donde vive MongoDB
+# y donde también pueden conectarse mayoresactualizaciones, conmijuegos, etc.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: autenticador_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MONGODB_URL: ${MONGODB_URL:-mongodb://autenticador_mongodb:27017}
+      DATABASE_NAME: ${DATABASE_NAME:-autenticador_db}
+      JWT_SECRET: ${JWT_SECRET:-super_secret_autenticador_key_2026}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    networks:
+      - autenticador_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: autenticador_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    depends_on:
+      - backend
+    networks:
+      - autenticador_net
+
+networks:
+  autenticador_net:
+    name: autenticador_net
+    external: true

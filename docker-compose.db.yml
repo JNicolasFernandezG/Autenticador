@@ -1,0 +1,38 @@
+version: "3.9"
+
+# Contenedor de Base de Datos aislado para evitar pérdida de datos
+# al actualizar o reconstruir el backend/frontend del Autenticador.
+# Uso:
+#   docker network create autenticador_net (solo la primera vez)
+#   docker compose -f docker-compose.db.yml up -d
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: autenticador_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: autenticador_db
+    volumes:
+      - autenticador_mongo_data:/data/db
+      - autenticador_mongo_config:/data/configdb
+    networks:
+      - autenticador_net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  autenticador_mongo_data:
+    name: autenticador_mongo_data
+  autenticador_mongo_config:
+    name: autenticador_mongo_config
+
+networks:
+  autenticador_net:
+    name: autenticador_net
+    external: true
