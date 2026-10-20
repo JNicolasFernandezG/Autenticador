@@ -8,18 +8,18 @@ on:
 jobs:
   deploy:
     name: Actualizar Contenedor Autenticador en Linux
-    # Si usás el Runner instalado en el servidor Linux (serverportable), dejá `self-hosted`.
-    # Si usás conexión por SSH desde la nube de GitHub, cambiá a `ubuntu-latest`.
     runs-on: self-hosted
 
     steps:
-      - name: Desplegar en /home/serverportable/Documentos/Autenticador
+      - name: Desplegar en servidor Linux (serverportable)
         run: |
-          cd /home/serverportable/Documentos/Autenticador
+          if [ -d "/home/serverportable/Documentos/Autenticador/Autenticador/.git" ]; then
+            cd /home/serverportable/Documentos/Autenticador/Autenticador
+          else
+            cd /home/serverportable/Documentos/Autenticador
+          fi
           git fetch origin main
           git reset --hard origin/main
-          # Asegura que la base de datos aislada esté encendida (no la reinicia ni borra si ya corre)
           docker compose -f docker-compose.db.yml up -d
-          # Reconstruye y actualiza únicamente el Autenticador (Caddy :8086 + Backend + Frontend)
           docker compose up -d --build --remove-orphans
           docker image prune -f
