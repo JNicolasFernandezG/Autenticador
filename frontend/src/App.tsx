@@ -35,8 +35,8 @@ export default function App() {
   });
 
   // Login states
-  const [loginEmail, setLoginEmail] = useState('admin@autenticador.com');
-  const [loginPassword, setLoginPassword] = useState('admin123');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loggingIn, setLoggingIn] = useState(false);
 
@@ -373,7 +373,7 @@ export default function App() {
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-indigo-500"
-                placeholder="admin@autenticador.com"
+                placeholder="correo@ejemplo.com"
               />
             </div>
             <div>
@@ -398,17 +398,6 @@ export default function App() {
               {loggingIn ? 'Verificando credenciales...' : 'Ingresar a la Torre de Control'}
             </button>
           </form>
-
-          <div className="mt-6 pt-5 border-t border-slate-800 text-xs text-slate-400 space-y-1">
-            <p className="font-semibold text-slate-300">Credenciales iniciales por defecto:</p>
-            <p>
-              Email: <code className="text-indigo-300">admin@autenticador.com</code>
-            </p>
-            <p>
-              Contraseña: <code className="text-indigo-300">admin123</code> (o PIN:{' '}
-              <code className="text-indigo-300">999999</code>)
-            </p>
-          </div>
         </div>
       </div>
     );
