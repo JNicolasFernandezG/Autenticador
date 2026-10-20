@@ -7,7 +7,6 @@ import {
   KeyRound,
   CheckCircle2,
   XCircle,
-  Sparkles,
   Link2,
   LogOut,
   Server,
@@ -15,11 +14,21 @@ import {
   Terminal,
   Copy,
   Check,
+  ExternalLink,
+  Settings2,
 } from 'lucide-react';
-import { api, Usuario, ServicioCatalogo, EstadoUsuario } from './api';
+import {
+  api,
+  Usuario,
+  ServicioCatalogo,
+  EstadoUsuario,
+  MagicLinkServicioItem,
+} from './api';
 
 export default function App() {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('auth_admin_token'));
+  const [token, setToken] = useState<string | null>(() =>
+    localStorage.getItem('auth_admin_token')
+  );
   const [adminUser, setAdminUser] = useState<Usuario | null>(() => {
     const raw = localStorage.getItem('auth_admin_user');
     return raw ? JSON.parse(raw) : null;
@@ -42,7 +51,6 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [filterServicio, setFilterServicio] = useState('');
   const [filterActivo, setFilterActivo] = useState<string>('');
-  const [filterBlack, setFilterBlack] = useState<string>('');
 
   // Catalogs
   const [serviciosCatalogo, setServiciosCatalogo] = useState<ServicioCatalogo[]>([]);
@@ -54,11 +62,12 @@ export default function App() {
   // Modals
   const [showNewUserModal, setShowNewUserModal] = useState(false);
   const [showNewServiceModal, setShowNewServiceModal] = useState(false);
+  const [editingService, setEditingService] = useState<ServicioCatalogo | null>(null);
   const [magicLinkData, setMagicLinkData] = useState<{
     userName: string;
-    accessUrl: string;
     codigoAcceso: string;
     token: string;
+    magicLinksList: MagicLinkServicioItem[];
   } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -67,7 +76,6 @@ export default function App() {
   const [newEmail, setNewEmail] = useState('');
   const [newPin, setNewPin] = useState('');
   const [newTipo, setNewTipo] = useState(1);
-  const [newBlack, setNewBlack] = useState(false);
   const [newServicios, setNewServicios] = useState<Record<string, boolean>>({
     mayoresactualizaciones: true,
     conmijuegos: true,
@@ -76,9 +84,11 @@ export default function App() {
   // New service form
   const [srvClave, setSrvClave] = useState('');
   const [srvNombre, setSrvNombre] = useState('');
+  const [srvUrlBase, setSrvUrlBase] = useState('http://localhost:3000');
+  const [srvRutaMagic, setSrvRutaMagic] = useState('/acceso');
   const [srvDesc, setSrvDesc] = useState('');
 
-  // Simulator form (Simulador de Petición desde contenedor externo)
+  // Simulator form
   const [simIdentifier, setSimIdentifier] = useState('marta.gonzalez@ejemplo.com');
   const [simServicio, setSimServicio] = useState('mayoresactualizaciones');
   const [simResult, setSimResult] = useState<any>(null);
@@ -142,7 +152,6 @@ export default function App() {
         nombre: search || undefined,
         servicio: filterServicio || undefined,
         activo: filterActivo === '' ? undefined : filterActivo === 'true',
-        black: filterBlack === '' ? undefined : filterBlack === 'true',
         orden: 'desc',
       });
       setUsuarios(res.items);
@@ -164,7 +173,7 @@ export default function App() {
     if (token) {
       fetchUsuarios();
     }
-  }, [token, skip, search, filterServicio, filterActivo, filterBlack]);
+  }, [token, skip, search, filterServicio, filterActivo]);
 
   const handleToggleServicio = async (userId: number, clave: string) => {
     if (!token) return;
@@ -201,19 +210,6 @@ export default function App() {
     }
   };
 
-  const handleToggleBlack = async (userId: number) => {
-    if (!token) return;
-    try {
-      const res = await api.toggleBlack(token, userId);
-      setUsuarios((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, black: res.black } : u))
-      );
-      notify(res.message, 'ok');
-    } catch (err: any) {
-      notify(err.message, 'err');
-    }
-  };
-
   const handleCambiarEstado = async (userId: number, estadoId: number) => {
     if (!token) return;
     try {
@@ -242,9 +238,9 @@ export default function App() {
       const res = await api.generarMagicLink(token, u.id);
       setMagicLinkData({
         userName: u.name,
-        accessUrl: res.accessUrl,
         codigoAcceso: res.codigoAcceso,
         token: res.token,
+        magicLinksList: res.magicLinksList || [],
       });
     } catch (err: any) {
       notify(err.message, 'err');
@@ -255,21 +251,22 @@ export default function App() {
     e.preventDefault();
     if (!token) return;
     try {
-      await api.crearUsuario(token, {
+      const created = await api.crearUsuario(token, {
         name: newName,
         email: newEmail,
         codigoAcceso: newPin || undefined,
         tipoUsuario: newTipo,
-        black: newBlack,
         activo: true,
         servicios: newServicios,
       });
-      notify(`Usuario '${newName}' creado exitosamente en el Autenticador.`);
+      notify(`Usuario '${newName}' creado exitosamente.`);
       setShowNewUserModal(false);
       setNewName('');
       setNewEmail('');
       setNewPin('');
-      fetchUsuarios();
+      await fetchUsuarios();
+      // Abrir inmediatamente los Magic Links de cada servicio para el nuevo usuario
+      handleMagicLink(created);
     } catch (err: any) {
       notify(err.message, 'err');
     }
@@ -282,13 +279,35 @@ export default function App() {
       const res = await api.crearServicioCatalogo(token, {
         clave: srvClave,
         nombre: srvNombre,
+        url_base: srvUrlBase,
+        ruta_magic_link: srvRutaMagic,
         descripcion: srvDesc,
       });
       notify(res.message);
       setShowNewServiceModal(false);
       setSrvClave('');
       setSrvNombre('');
+      setSrvUrlBase('http://localhost:3000');
+      setSrvRutaMagic('/acceso');
       setSrvDesc('');
+      fetchCatalogs();
+    } catch (err: any) {
+      notify(err.message, 'err');
+    }
+  };
+
+  const handleUpdateServiceUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !editingService) return;
+    try {
+      const res = await api.actualizarServicioCatalogo(token, editingService.clave, {
+        nombre: editingService.nombre,
+        url_base: editingService.url_base,
+        ruta_magic_link: editingService.ruta_magic_link,
+        descripcion: editingService.descripcion,
+      });
+      notify(res.message);
+      setEditingService(null);
       fetchCatalogs();
     } catch (err: any) {
       notify(err.message, 'err');
@@ -316,6 +335,7 @@ export default function App() {
   const copyText = (key: string, value: string) => {
     navigator.clipboard.writeText(value);
     setCopiedField(key);
+    notify('Copiado al portapapeles');
     setTimeout(() => setCopiedField(null), 2000);
   };
 
@@ -394,8 +414,7 @@ export default function App() {
     );
   }
 
-  // Claves de servicios activas en catálogo
-  const clavesServicios =
+  const clavesServicios: ServicioCatalogo[] =
     serviciosCatalogo.length > 0
       ? serviciosCatalogo
       : [
@@ -403,6 +422,8 @@ export default function App() {
             clave: 'mayoresactualizaciones',
             nombre: 'Mayores Actualizaciones',
             descripcion: 'Plataforma SIPI',
+            url_base: 'http://localhost:3000',
+            ruta_magic_link: '/acceso',
             color: 'indigo',
             activo: true,
           },
@@ -410,6 +431,8 @@ export default function App() {
             clave: 'conmijuegos',
             nombre: 'ConmiJuegos',
             descripcion: 'Entrenamiento Cognitivo',
+            url_base: 'http://localhost:5174',
+            ruta_magic_link: '/acceso',
             color: 'teal',
             activo: true,
           },
@@ -452,7 +475,7 @@ export default function App() {
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Gestión centralizada de cuentas y permisos por servicio (
+                Gestión de cuentas y Magic Links independientes por servicio (
                 <code className="text-indigo-300">mayoresactualizaciones</code>,{' '}
                 <code className="text-teal-300">conmijuegos</code>, etc.)
               </p>
@@ -491,20 +514,22 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Resumen de Claves de Servicios Conectados */}
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>Total Cuentas Registradas</span>
-              <Users className="w-4 h-4 text-indigo-400" />
+        {/* Tarjetas de Servicios y Configuración de URL de Magic Link */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+                <span>Total Cuentas Registradas</span>
+                <Users className="w-4 h-4 text-indigo-400" />
+              </div>
+              <p className="text-2xl font-bold text-white">{total}</p>
             </div>
-            <p className="text-2xl font-bold text-white">{total}</p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Base unificada en contenedor MongoDB aislado
+            <p className="text-[11px] text-slate-400 mt-2">
+              Cada servicio genera su propio Magic Link apuntando a su URL configurada.
             </p>
           </div>
 
-          {clavesServicios.slice(0, 2).map((srv) => {
+          {clavesServicios.map((srv) => {
             const countSrv = usuarios.filter((u) => u.servicios?.[srv.clave]).length;
             return (
               <div
@@ -513,16 +538,28 @@ export default function App() {
               >
                 <div>
                   <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-semibold text-slate-200">{srv.nombre}</span>
-                    <code className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-[11px]">
-                      {srv.clave}
-                    </code>
+                    <span className="font-semibold text-white">{srv.nombre}</span>
+                    <div className="flex items-center gap-1.5">
+                      <code className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-[11px]">
+                        {srv.clave}
+                      </code>
+                      <button
+                        onClick={() => setEditingService({ ...srv })}
+                        title="Configurar URL del Magic Link de este servicio"
+                        className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      >
+                        <Settings2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-[11px] text-slate-400 line-clamp-1">{srv.descripcion}</p>
+                  <p className="text-[11px] text-slate-400 font-mono truncate">
+                    Magic Link base: <span className="text-teal-300">{srv.url_base}</span>
+                    {srv.ruta_magic_link || '/acceso'}?token=...
+                  </p>
                 </div>
                 <div className="mt-3 flex items-center justify-between">
                   <span className="text-xs text-slate-400">
-                    En página actual: <strong className="text-white">{countSrv}</strong> activos
+                    En vista: <strong className="text-white">{countSrv}</strong> habilitados
                   </span>
                   <button
                     onClick={() =>
@@ -540,28 +577,6 @@ export default function App() {
               </div>
             );
           })}
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                <span>Servicios Registrados</span>
-                <Server className="w-4 h-4 text-teal-400" />
-              </div>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {clavesServicios.map((s) => (
-                  <span
-                    key={s.clave}
-                    className="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-800 text-teal-300 border border-slate-700"
-                  >
-                    {s.clave}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-2">
-              Clic en los botones de la tabla para habilitar/deshabilitar por usuario.
-            </p>
-          </div>
         </section>
 
         {/* Barra de Filtros */}
@@ -609,19 +624,6 @@ export default function App() {
             <option value="false">Solo Suspendidas / Baja</option>
           </select>
 
-          <select
-            value={filterBlack}
-            onChange={(e) => {
-              setSkip(0);
-              setFilterBlack(e.target.value);
-            }}
-            className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
-          >
-            <option value="">Suscripción Black: Todos</option>
-            <option value="true">Solo Black</option>
-            <option value="false">Estándar</option>
-          </select>
-
           <button
             onClick={fetchUsuarios}
             className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
@@ -638,19 +640,18 @@ export default function App() {
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-950/60 text-[11px] uppercase tracking-wider text-slate-400">
                   <th className="py-3.5 px-4">ID / Usuario</th>
-                  <th className="py-3.5 px-4">PIN Acceso</th>
+                  <th className="py-3.5 px-4">PIN (6 dígitos)</th>
                   <th className="py-3.5 px-4">
-                    Permisos por Clave de Servicio (Clic para alternar)
+                    Servicios Habilitados (Clic para activar/desactivar)
                   </th>
                   <th className="py-3.5 px-4">Estado Global</th>
-                  <th className="py-3.5 px-4">Suscripción</th>
-                  <th className="py-3.5 px-4 text-right">Acciones Admin</th>
+                  <th className="py-3.5 px-4 text-right">Magic Links y Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/70 text-sm">
                 {usuarios.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-slate-400">
+                    <td colSpan={5} className="py-10 text-center text-slate-400">
                       {loading
                         ? 'Cargando cuentas desde MongoDB...'
                         : 'No se encontraron usuarios con los filtros seleccionados.'}
@@ -715,41 +716,33 @@ export default function App() {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={u.estadoId}
-                            onChange={(e) => handleCambiarEstado(u.id, Number(e.target.value))}
-                            className={`text-xs font-semibold px-2.5 py-1 rounded-lg border bg-slate-950 focus:outline-none ${
-                              u.activo
-                                ? 'border-emerald-500/40 text-emerald-300'
-                                : 'border-rose-500/40 text-rose-300'
-                            }`}
-                          >
-                            {estadosCatalogo.map((est) => (
-                              <option key={est.id} value={est.id}>
-                                {est.codigo}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <button
-                          onClick={() => handleToggleBlack(u.id)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border flex items-center gap-1 transition ${
-                            u.black
-                              ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                        <select
+                          value={u.estadoId}
+                          onChange={(e) => handleCambiarEstado(u.id, Number(e.target.value))}
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-lg border bg-slate-950 focus:outline-none ${
+                            u.activo
+                              ? 'border-emerald-500/40 text-emerald-300'
+                              : 'border-rose-500/40 text-rose-300'
                           }`}
                         >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          {u.black ? 'BLACK' : 'Estándar'}
-                        </button>
+                          {estadosCatalogo.map((est) => (
+                            <option key={est.id} value={est.id}>
+                              {est.codigo}
+                            </option>
+                          ))}
+                        </select>
                       </td>
 
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleMagicLink(u)}
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 flex items-center gap-1.5 transition"
+                          >
+                            <Link2 className="w-3.5 h-3.5" />
+                            Magic Links
+                          </button>
+
                           <button
                             onClick={() => handleToggleActivo(u.id)}
                             className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
@@ -759,14 +752,6 @@ export default function App() {
                             }`}
                           >
                             {u.activo ? 'Suspender' : 'Activar'}
-                          </button>
-
-                          <button
-                            onClick={() => handleMagicLink(u)}
-                            title="Generar Magic Link / Token JWT"
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-indigo-500/20 text-slate-300 hover:text-indigo-300 border border-slate-700 transition"
-                          >
-                            <Link2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -877,8 +862,7 @@ export default function App() {
                   <XCircle className="w-4 h-4 text-rose-400" />
                 )}
                 <span>
-                  Resultado:{' '}
-                  {simResult.allowed ? 'ACCESO AUTORIZADO' : 'ACCESO DENEGADO'} —{' '}
+                  Resultado: {simResult.allowed ? 'ACCESO AUTORIZADO' : 'ACCESO DENEGADO'} —{' '}
                   {simResult.message}
                 </span>
               </div>
@@ -896,7 +880,8 @@ export default function App() {
               Registrar Usuario en Torre de Control
             </h3>
             <p className="text-xs text-slate-400 mb-4">
-              Seleccioná qué servicios tendrá habilitados desde el inicio.
+              Seleccioná qué servicios tendrá habilitados. Al crearlo se generarán los Magic Links
+              de cada plataforma.
             </p>
             <form onSubmit={handleCreateUser} className="space-y-3.5">
               <div>
@@ -977,15 +962,6 @@ export default function App() {
                 </div>
               </div>
 
-              <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={newBlack}
-                  onChange={(e) => setNewBlack(e.target.checked)}
-                />
-                Habilitar Suscripción Black
-              </label>
-
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
@@ -998,7 +974,7 @@ export default function App() {
                   type="submit"
                   className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
                 >
-                  Crear Cuenta
+                  Crear Cuenta y Generar Magic Links
                 </button>
               </div>
             </form>
@@ -1014,8 +990,8 @@ export default function App() {
               Registrar Nueva Clave de Servicio
             </h3>
             <p className="text-xs text-slate-400 mb-4">
-              Agregá un nuevo contenedor/servicio del servidor Linux para gestionar sus permisos
-              desde esta misma tabla.
+              Agregá un nuevo contenedor/servicio indicando su URL base para que genere su propio
+              Magic Link independiente.
             </p>
             <form onSubmit={handleCreateService} className="space-y-3.5">
               <div>
@@ -1041,6 +1017,32 @@ export default function App() {
                   placeholder="Ej: Aulas Virtuales"
                   className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white"
                 />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="block text-xs text-slate-300 mb-1">
+                    URL Base del Frontend
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={srvUrlBase}
+                    onChange={(e) => setSrvUrlBase(e.target.value)}
+                    placeholder="https://app.tudominio.com"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Ruta Magic Link</label>
+                  <input
+                    type="text"
+                    required
+                    value={srvRutaMagic}
+                    onChange={(e) => setSrvRutaMagic(e.target.value)}
+                    placeholder="/acceso"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white font-mono"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs text-slate-300 mb-1">Descripción</label>
@@ -1072,24 +1074,109 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal Magic Link */}
+      {/* Modal Editar URL de Servicio */}
+      {editingService && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-white mb-1">
+              Configurar URL de Magic Link —{' '}
+              <code className="text-indigo-300">{editingService.clave}</code>
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Definí a qué dominio/puerto y ruta redirigirá el Magic Link de este servicio.
+            </p>
+            <form onSubmit={handleUpdateServiceUrl} className="space-y-3.5">
+              <div>
+                <label className="block text-xs text-slate-300 mb-1">Nombre Visible</label>
+                <input
+                  type="text"
+                  required
+                  value={editingService.nombre}
+                  onChange={(e) =>
+                    setEditingService({ ...editingService, nombre: e.target.value })
+                  }
+                  className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="block text-xs text-slate-300 mb-1">
+                    URL Base del Servicio
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={editingService.url_base}
+                    onChange={(e) =>
+                      setEditingService({ ...editingService, url_base: e.target.value })
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Ruta</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingService.ruta_magic_link || '/acceso'}
+                    onChange={(e) =>
+                      setEditingService({
+                        ...editingService,
+                        ruta_magic_link: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white font-mono"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingService(null)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Magic Links por Servicio */}
       {magicLinkData && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-white">
-              Credenciales y Magic Link — {magicLinkData.userName}
-            </h3>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">
+                Magic Links por Servicio y PIN — {magicLinkData.userName}
+              </h3>
+              <p className="text-xs text-slate-400">
+                Cada enlace redirige directamente a la plataforma correspondiente (
+                <code>/acceso?token=...</code>), valida contra el Autenticador e ingresa al inicio.
+              </p>
+            </div>
+
             <div className="space-y-3 text-xs">
+              {/* PIN Compartido */}
               <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between">
                 <div>
-                  <span className="text-slate-400 block">PIN de 6 dígitos (Código de Acceso):</span>
+                  <span className="text-slate-400 block">
+                    PIN de 6 dígitos compartido (Código de Acceso):
+                  </span>
                   <strong className="text-lg font-mono text-amber-300">
                     {magicLinkData.codigoAcceso}
                   </strong>
                 </div>
                 <button
                   onClick={() => copyText('pin', magicLinkData.codigoAcceso)}
-                  className="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1.5 font-medium"
                 >
                   {copiedField === 'pin' ? (
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -1100,27 +1187,66 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Enlace de Acceso Directo (Magic Link):</span>
-                  <button
-                    onClick={() => copyText('url', magicLinkData.accessUrl)}
-                    className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1"
+              {/* Un Magic Link distinto por cada servicio */}
+              <div className="space-y-2.5">
+                {magicLinkData.magicLinksList.map((ml) => (
+                  <div
+                    key={ml.clave}
+                    className={`p-3.5 rounded-xl border space-y-2 ${
+                      ml.habilitado
+                        ? 'bg-slate-950 border-indigo-500/30'
+                        : 'bg-slate-950/50 border-slate-800 opacity-60'
+                    }`}
                   >
-                    {copiedField === 'url' ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                    Copiar URL
-                  </button>
-                </div>
-                <p className="font-mono text-[11px] text-indigo-300 break-all">
-                  {magicLinkData.accessUrl}
-                </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-white">{ml.nombre}</span>
+                        <code className="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 text-[11px]">
+                          {ml.clave}
+                        </code>
+                        {ml.habilitado ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                            Permiso Activo
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                            Sin Permiso en este Servicio
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <a
+                          href={ml.accessUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Abrir enlace en pestaña nueva"
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                        <button
+                          onClick={() => copyText(`ml-${ml.clave}`, ml.accessUrl)}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1"
+                        >
+                          {copiedField === `ml-${ml.clave}` ? (
+                            <Check className="w-3.5 h-3.5" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                          Copiar Magic Link ({ml.clave})
+                        </button>
+                      </div>
+                    </div>
+                    <p className="font-mono text-[11px] text-teal-300 break-all bg-slate-900/90 p-2 rounded border border-slate-800">
+                      {ml.accessUrl}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="flex justify-end">
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
               <button
                 onClick={() => setMagicLinkData(null)}
                 className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold"

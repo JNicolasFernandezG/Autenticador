@@ -1,30 +1,56 @@
-version: "3.9"
+name: autenticador_db
 
-# Contenedor de Base de Datos aislado para evitar pérdida de datos
-# al actualizar o reconstruir el backend/frontend del Autenticador.
-# Uso:
-#   docker network create autenticador_net (solo la primera vez)
-#   docker compose -f docker-compose.db.yml up -d
+# ============================================================================
+# Contenedor de Base de Datos Aislado (MongoDB) — Blindado
+# Todas las credenciales se leen estrictamente desde el archivo `.env` (ignorado en Git).
+# Comando para levantarlo de forma separada:
+#   docker compose -p autenticador_db -f docker-compose.db.yml up -d
+# ============================================================================
 
 services:
   mongodb:
     image: mongo:7.0
     container_name: autenticador_mongodb
     restart: unless-stopped
-    ports:
-      - "27017:27017"
+    command: ["mongod", "--auth", "--bind_ip_all"]
+    # NO expone puertos al host ni a internet: solo visible dentro de autenticador_db_net
+    expose:
+      - "27017"
     environment:
-      MONGO_INITDB_DATABASE: autenticador_db
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?Falta definir MONGO_USER en el archivo .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Falta definir MONGO_PASSWORD en el archivo .env}
+      MONGO_INITDB_DATABASE: ${DATABASE_NAME:?Falta definir DATABASE_NAME en el archivo .env}
+    # 1. Prevención de escalada de privilegios
+    security_opt:
+      - no-new-privileges:true
+    # 2. Límites de memoria y CPU
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    # 3. Rotación y límite de logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
     volumes:
       - autenticador_mongo_data:/data/db
       - autenticador_mongo_config:/data/configdb
-    networks:
-      - autenticador_net
+    # 4. Healthcheck activo
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 15s
+    # 5. Únicamente conectado a la red cerrada de base de datos
+    networks:
+      - autenticador_db_net
 
 volumes:
   autenticador_mongo_data:
@@ -33,6 +59,8 @@ volumes:
     name: autenticador_mongo_config
 
 networks:
-  autenticador_net:
-    name: autenticador_net
-    external: true
+  # Red interna cerrada (`internal: true`): bloquea todo tráfico hacia/desde el exterior
+  autenticador_db_net:
+    name: autenticador_db_net
+    driver: bridge
+    internal: true

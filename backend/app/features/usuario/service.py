@@ -4,6 +4,8 @@ from typing import Optional, List, Dict, Any
 from fastapi import HTTPException, status
 from pymongo import ASCENDING, DESCENDING
 from app.core.database import get_database
+from app.core.config import settings
+from app.core.security import create_access_token
 from app.features.auth.service import format_user_response
 
 
@@ -14,7 +16,6 @@ async def get_usuarios_paginados(
     fecha_desde: Optional[date] = None,
     fecha_hasta: Optional[date] = None,
     tipo_usuario: Optional[int] = None,
-    black: Optional[bool] = None,
     activo: Optional[bool] = None,
     servicio: Optional[str] = None,
     orden: str = "desc",
@@ -39,8 +40,6 @@ async def get_usuarios_paginados(
         query["date_start"] = date_query
     if tipo_usuario is not None:
         query["tipo_usuario"] = tipo_usuario
-    if black is not None:
-        query["black"] = black
     if activo is not None:
         query["activo"] = activo
     if servicio and servicio.strip():
@@ -102,28 +101,6 @@ async def toggle_activo(user_id: int) -> Dict[str, Any]:
     }
 
 
-async def toggle_black(user_id: int) -> Dict[str, Any]:
-    db = get_database()
-    user = await db["usuarios"].find_one({"id": user_id})
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Usuario con ID {user_id} no encontrado",
-        )
-    current_state = bool(user.get("black", False))
-    new_state = not current_state
-    await db["usuarios"].update_one(
-        {"id": user_id},
-        {"$set": {"black": new_state}},
-    )
-    action_text = "activada" if new_state else "desactivada"
-    return {
-        "success": True,
-        "message": f"Suscripción Black del usuario '{user.get('name')}' {action_text} con éxito.",
-        "black": new_state,
-    }
-
-
 async def toggle_servicio_usuario(user_id: int, servicio_clave: str) -> Dict[str, Any]:
     db = get_database()
     user = await db["usuarios"].find_one({"id": user_id})
@@ -161,22 +138,35 @@ async def get_servicios_catalogo() -> Dict[str, Any]:
     db = get_database()
     cursor = db["servicios_catalogo"].find({}, {"_id": 0}).sort("clave", ASCENDING)
     docs = await cursor.to_list(length=100)
+    for d in docs:
+        if d.get("clave") == "mayoresactualizaciones":
+            d.setdefault("url_base", settings.MAYORES_FRONTEND_URL)
+        elif d.get("clave") == "conmijuegos":
+            d.setdefault("url_base", settings.CONMIJUEGOS_FRONTEND_URL)
+        else:
+            d.setdefault("url_base", settings.FRONTEND_URL)
+        d.setdefault("ruta_magic_link", "/acceso")
     return {"success": True, "servicios": docs}
 
 
 async def crear_servicio_catalogo(
     clave: str,
     nombre: str,
+    url_base: str,
+    ruta_magic_link: Optional[str] = "/acceso",
     descripcion: Optional[str] = "",
     color: Optional[str] = "indigo",
 ) -> Dict[str, Any]:
     db = get_database()
     clave_limpia = re.sub(r"[^a-z0-9_-]+", "", clave.strip().lower())
     nombre_limpio = nombre.strip()
-    if not clave_limpia or not nombre_limpio:
+    url_limpia = url_base.strip().rstrip("/")
+    ruta_limpia = "/" + (ruta_magic_link or "/acceso").strip().lstrip("/")
+
+    if not clave_limpia or not nombre_limpio or not url_limpia:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La clave y el nombre del servicio son obligatorios.",
+            detail="La clave, el nombre y la URL base del servicio son obligatorios.",
         )
     existente = await db["servicios_catalogo"].find_one({"clave": clave_limpia})
     if existente:
@@ -188,14 +178,121 @@ async def crear_servicio_catalogo(
         "clave": clave_limpia,
         "nombre": nombre_limpio,
         "descripcion": (descripcion or "").strip(),
+        "url_base": url_limpia,
+        "ruta_magic_link": ruta_limpia,
         "color": color or "indigo",
         "activo": True,
     }
     await db["servicios_catalogo"].insert_one(doc)
     return {
         "success": True,
-        "message": f"Servicio '{nombre_limpio}' ({clave_limpia}) registrado en el Autenticador.",
+        "message": f"Servicio '{nombre_limpio}' ({clave_limpia}) registrado con URL '{url_limpia}'.",
         "servicio": {k: v for k, v in doc.items() if k != "_id"},
+    }
+
+
+async def actualizar_servicio_catalogo(
+    clave: str,
+    nombre: Optional[str] = None,
+    url_base: Optional[str] = None,
+    ruta_magic_link: Optional[str] = None,
+    descripcion: Optional[str] = None,
+    color: Optional[str] = None,
+) -> Dict[str, Any]:
+    db = get_database()
+    clave_limpia = clave.strip().lower()
+    srv = await db["servicios_catalogo"].find_one({"clave": clave_limpia})
+    if not srv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Servicio '{clave_limpia}' no encontrado en el catálogo.",
+        )
+
+    updates: Dict[str, Any] = {}
+    if nombre is not None and nombre.strip():
+        updates["nombre"] = nombre.strip()
+    if url_base is not None and url_base.strip():
+        updates["url_base"] = url_base.strip().rstrip("/")
+    if ruta_magic_link is not None and ruta_magic_link.strip():
+        updates["ruta_magic_link"] = "/" + ruta_magic_link.strip().lstrip("/")
+    if descripcion is not None:
+        updates["descripcion"] = descripcion.strip()
+    if color is not None and color.strip():
+        updates["color"] = color.strip()
+
+    if updates:
+        await db["servicios_catalogo"].update_one({"clave": clave_limpia}, {"$set": updates})
+
+    actualizado = await db["servicios_catalogo"].find_one({"clave": clave_limpia}, {"_id": 0})
+    return {
+        "success": True,
+        "message": f"Configuración de '{clave_limpia}' actualizada.",
+        "servicio": actualizado,
+    }
+
+
+async def generar_magic_links_por_servicio(
+    user_id: int,
+    servicio_especifico: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Genera los Magic Links distintos para cada servicio registrado (mayoresactualizaciones, conmijuegos, etc.).
+    Cada Magic Link apunta a la URL de ese servicio + su ruta (/acceso?token=<JWT>) para que al abrirlo
+    choque contra el autenticador de ese servicio e ingrese directo a su pantalla de inicio.
+    """
+    db = get_database()
+    user = await db["usuarios"].find_one({"id": user_id})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Usuario con ID {user_id} no encontrado",
+        )
+
+    token = create_access_token(user)
+    catalogo_res = await get_servicios_catalogo()
+    servicios_catalogo = catalogo_res["servicios"]
+    servicios_usuario = user.get("servicios") or {}
+
+    magic_links_map: Dict[str, Dict[str, Any]] = {}
+    magic_links_list: List[Dict[str, Any]] = []
+
+    for srv in servicios_catalogo:
+        clave = srv["clave"]
+        base_url = srv.get("url_base", settings.FRONTEND_URL).rstrip("/")
+        ruta = "/" + srv.get("ruta_magic_link", "/acceso").lstrip("/")
+        url_completa = f"{base_url}{ruta}?token={token}"
+        habilitado = bool(user.get("tipo_usuario") == 2 or servicios_usuario.get(clave, False))
+
+        item = {
+            "clave": clave,
+            "nombre": srv.get("nombre", clave),
+            "urlBase": base_url,
+            "accessUrl": url_completa,
+            "habilitado": habilitado,
+        }
+        magic_links_map[clave] = item
+        magic_links_list.append(item)
+
+    # Si se pidió un servicio puntual o por defecto el primero habilitado
+    clave_seleccionada = (servicio_especifico or "").strip().lower()
+    if clave_seleccionada and clave_seleccionada in magic_links_map:
+        primary_url = magic_links_map[clave_seleccionada]["accessUrl"]
+    elif "mayoresactualizaciones" in magic_links_map:
+        primary_url = magic_links_map["mayoresactualizaciones"]["accessUrl"]
+    elif magic_links_list:
+        primary_url = magic_links_list[0]["accessUrl"]
+    else:
+        primary_url = f"{settings.FRONTEND_URL.rstrip('/')}/acceso?token={token}"
+
+    return {
+        "success": True,
+        "token": token,
+        "codigoAcceso": user.get("codigo_acceso"),
+        "activo": bool(user.get("activo", True)),
+        "accessUrl": primary_url,
+        "magicLinks": magic_links_map,
+        "magicLinksList": magic_links_list,
+        "message": "Enlaces de acceso directo (Magic Links) generados por servicio exitosamente.",
     }
 
 
@@ -297,7 +394,7 @@ async def crear_estado_usuario(
     return {
         "success": True,
         "message": f"Estado '{nombre_limpio}' creado exitosamente con código '{cod}'.",
-        "estado": {k: v for k, v in nuevo_doc.items() if k != "_id"},
+        "estado": {k: v for k, v in nuevo_doc.items() if k != "_id"}
     }
 
 
@@ -308,7 +405,6 @@ async def toggle_habilitado_estado(estado_id: int) -> Dict[str, Any]:
             detail="Los estados esenciales del sistema (PENDIENTE_VERIFICACION y ACTIVO) no pueden ser inhabilitados.",
         )
     db = get_database()
-    estado = await db["usuarios"].find_one({"id": estado_id})
     estado = await db["estados_usuario"].find_one({"id": estado_id})
     if not estado:
         raise HTTPException(

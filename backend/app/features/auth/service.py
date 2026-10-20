@@ -4,10 +4,16 @@ from typing import Dict, Any, Optional
 from fastapi import HTTPException, status
 from pymongo import DESCENDING
 from app.core.database import get_database
-from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
+from app.core.security import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    decode_access_token,
+)
 from app.features.auth.schemas import (
     RegisterRequest,
     LoginRequest,
+    VerificarTokenRequest,
     ValidateServiceAccessRequest,
     BajaServicioRequest,
 )
@@ -38,7 +44,6 @@ def format_user_response(doc: Dict[str, Any]) -> Dict[str, Any]:
         "email": doc.get("email", ""),
         "codigoAcceso": doc.get("codigo_acceso", ""),
         "tipoUsuario": int(doc.get("tipo_usuario", 1)),
-        "black": bool(doc.get("black", False)),
         "activo": bool(doc.get("activo", True)),
         "estadoId": int(doc.get("estado_id", 2)),
         "estadoCodigo": doc.get("estado_codigo", "ACTIVO"),
@@ -71,8 +76,6 @@ async def register_usuario(req: RegisterRequest, is_admin_creation: bool = False
 
     existing = await db["usuarios"].find_one({"email": email_clean})
     if existing:
-        # Si viene desde un servicio externo y el usuario ya existe en la BD central,
-        # podemos habilitarle el servicio origen si aún no lo tenía o informar conflicto si es admin
         if not is_admin_creation and req.servicioOrigen:
             clave = req.servicioOrigen.strip().lower()
             servicios_actuales = existing.get("servicios") or {}
@@ -99,7 +102,6 @@ async def register_usuario(req: RegisterRequest, is_admin_creation: bool = False
     )
     raw_password = req.password.strip() if (req.password and req.password.strip()) else pin
 
-    # Construir mapa de servicios iniciales
     catalogo_cursor = db["servicios_catalogo"].find({}, {"_id": 0, "clave": 1})
     catalogo_docs = await catalogo_cursor.to_list(length=100)
     servicios_map: Dict[str, bool] = {d["clave"]: False for d in catalogo_docs}
@@ -114,7 +116,6 @@ async def register_usuario(req: RegisterRequest, is_admin_creation: bool = False
         clave_origen = req.servicioOrigen.strip().lower()
         servicios_map[clave_origen] = True
     elif not req.servicios:
-        # Por defecto si lo crea el admin sin especificar, habilita ambos o deja listo
         servicios_map["mayoresactualizaciones"] = True
         servicios_map["conmijuegos"] = True
 
@@ -129,7 +130,6 @@ async def register_usuario(req: RegisterRequest, is_admin_creation: bool = False
         "password_hash": hash_password(raw_password),
         "codigo_acceso": pin,
         "tipo_usuario": int(req.tipoUsuario),
-        "black": bool(req.black),
         "activo": es_activo,
         "estado_id": estado_id,
         "estado_codigo": estado_codigo,
@@ -180,7 +180,6 @@ async def authenticate_user(req: LoginRequest) -> Dict[str, Any]:
             detail=f"La cuenta de '{user.get('name')}' está inactiva ({user.get('estado_codigo', 'SUSPENDIDO')}).",
         )
 
-    # Si un servicio específico solicita validar el ingreso (ej: mayoresactualizaciones o conmijuegos)
     if req.servicio and req.servicio.strip():
         clave_srv = req.servicio.strip().lower()
         servicios_user = user.get("servicios") or {}
@@ -200,11 +199,53 @@ async def authenticate_user(req: LoginRequest) -> Dict[str, Any]:
     }
 
 
+async def verificar_token_magic_link(req: VerificarTokenRequest) -> Dict[str, Any]:
+    """
+    Valida el token JWT recibido desde un Magic Link (/acceso?token=...)
+    cuando el alumno ingresa a MayoresActualizaciones o a ConmiJuegos.
+    """
+    payload = decode_access_token(req.token)
+    user_id = payload.get("id")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido: no contiene identificador de usuario.",
+        )
+
+    db = get_database()
+    user = await db["usuarios"].find_one({"id": int(user_id)})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado en la base de datos central.",
+        )
+
+    if not user.get("activo", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"La cuenta de '{user.get('name')}' se encuentra inactiva ({user.get('estado_codigo', 'SUSPENDIDO')}).",
+        )
+
+    clave_srv = (req.servicio or payload.get("servicio_destino") or "").strip().lower()
+    if clave_srv:
+        servicios_user = user.get("servicios") or {}
+        if user.get("tipo_usuario") != 2 and not servicios_user.get(clave_srv, False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"El usuario '{user.get('name')}' no tiene habilitado el acceso a '{clave_srv}'.",
+            )
+
+    fresh_token = create_access_token(user)
+    return {
+        "success": True,
+        "allowed": True,
+        "message": "Token de Magic Link verificado exitosamente.",
+        "token": fresh_token,
+        "user": format_user_response(user),
+    }
+
+
 async def validate_service_access(req: ValidateServiceAccessRequest) -> Dict[str, Any]:
-    """
-    Endpoint central consumido por los contenedores de mayoresactualizaciones, conmijuegos, etc.
-    Verifica si el usuario existe, está activo y tiene habilitada la clave del servicio.
-    """
     db = get_database()
     user: Optional[Dict[str, Any]] = None
 

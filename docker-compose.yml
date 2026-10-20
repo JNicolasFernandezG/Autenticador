@@ -1,25 +1,101 @@
-version: "3.9"
+name: autenticador_app
 
-# Contenedor de Aplicación del Autenticador (Backend + Frontend Admin)
-# Se conecta a la red externa `autenticador_net` donde vive MongoDB
-# y donde también pueden conectarse mayoresactualizaciones, conmijuegos, etc.
+# ============================================================================
+# Contenedores de Aplicación (Caddy Gateway :8086 + Backend FastAPI + Frontend)
+# Todas las credenciales y secretos se leen estrictamente desde el archivo `.env`.
+# ============================================================================
 
 services:
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: autenticador_caddy
+    restart: unless-stopped
+    # Expone únicamente el puerto 8086 en el servidor Linux
+    ports:
+      - "${PORT:-8086}:80"
+    # 1. Prevención de escalada de privilegios
+    security_opt:
+      - no-new-privileges:true
+    # 2. Límites de memoria y CPU
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+    # 3. Rotación y límite de logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # 6. Configuración montada en solo lectura (:ro)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    # 4. Healthcheck activo
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    # 5. Red aislada dedicada (NO tiene acceso a autenticador_db_net)
+    networks:
+      - autenticador_internal
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: autenticador_backend
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
-      MONGODB_URL: ${MONGODB_URL:-mongodb://autenticador_mongodb:27017}
-      DATABASE_NAME: ${DATABASE_NAME:-autenticador_db}
-      JWT_SECRET: ${JWT_SECRET:-super_secret_autenticador_key_2026}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      MONGODB_URL: mongodb://${MONGO_USER:?Falta MONGO_USER}:${MONGO_PASSWORD:?Falta MONGO_PASSWORD}@autenticador_mongodb:27017/${DATABASE_NAME:?Falta DATABASE_NAME}?authSource=admin
+      DATABASE_NAME: ${DATABASE_NAME}
+      JWT_SECRET: ${JWT_SECRET:?Falta definir JWT_SECRET en .env}
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-}
+      FRONTEND_URL: ${FRONTEND_URL}
+      MAYORES_FRONTEND_URL: ${MAYORES_FRONTEND_URL}
+      CONMIJUEGOS_FRONTEND_URL: ${CONMIJUEGOS_FRONTEND_URL}
+    # 1. Prevención de escalada de privilegios
+    security_opt:
+      - no-new-privileges:true
+    # 2. Límites de memoria y CPU
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.20"
+          memory: 128M
+    # 3. Rotación y límite de logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # 4. Healthcheck activo
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # 5. ÚNICO contenedor que tiene permiso de entrar a autenticador_db_net
     networks:
-      - autenticador_net
+      - autenticador_internal
+      - autenticador_db_net
 
   frontend:
     build:
@@ -27,16 +103,49 @@ services:
       dockerfile: Dockerfile
     container_name: autenticador_frontend
     restart: unless-stopped
-    ports:
-      - "5173:80"
+    expose:
+      - "80"
     environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_API_URL: ${VITE_API_URL:-}
+    # 1. Prevención de escalada de privilegios
+    security_opt:
+      - no-new-privileges:true
+    # 2. Límites de memoria y CPU
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+    # 3. Rotación y límite de logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # 4. Healthcheck activo
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
     depends_on:
       - backend
+    # 5. Red aislada dedicada (NO tiene acceso a autenticador_db_net)
     networks:
-      - autenticador_net
+      - autenticador_internal
+
+volumes:
+  caddy_data:
+  caddy_config:
 
 networks:
-  autenticador_net:
-    name: autenticador_net
+  # Red bridge para Caddy <-> Frontend <-> Backend
+  autenticador_internal:
+    driver: bridge
+  # Se une a la red interna cerrada creada por docker-compose.db.yml
+  autenticador_db_net:
+    name: autenticador_db_net
     external: true

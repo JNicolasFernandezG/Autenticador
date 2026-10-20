@@ -1,0 +1,48 @@
+# ============================================================================
+# Caddyfile — Autenticador Central (BUENAS PRÁCTICAS BB)
+# Escucha internamente en :80 (expuesto en el host en el puerto 8086)
+# Dominio público: https://autenticador.asistodo.com.ar
+# ============================================================================
+
+:80 {
+	# 1. Cabeceras de Seguridad y Ocultamiento del Servidor (L8-L21)
+	header {
+		# Ocultamiento del encabezado de identificación del servidor web
+		-Server
+
+		# Prevención de MIME-sniffing
+		X-Content-Type-Options "nosniff"
+
+		# Protección contra ataques de Clickjacking
+		X-Frame-Options "DENY"
+
+		# Control de fuga de información en la cabecera Referer
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# Restricción de APIs sensibles del navegador
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	# 2. Límite de tamaño en peticiones entrantes (mitigación de DoS / memoria) (L24-L26)
+	request_body {
+		max_size 10MB
+	}
+
+	# 3. Bloqueo de archivos y directorios ocultos (.env, .git, etc.) (L29-L30)
+	@hidden path */.*
+	respond @hidden 404
+
+	# 4. Aislamiento de la aplicación mediante Proxy Inverso explícito (L33-L36)
+	# Caddy actúa como barrera filtrando rutas antes de delegar a FastAPI
+	@api_routes {
+		path /auth* /usuario* /api/auth* /api/usuario* /health
+	}
+	handle @api_routes {
+		reverse_proxy backend:8000
+	}
+
+	# 5. Consola de Administración (Frontend React en Nginx interno)
+	handle {
+		reverse_proxy frontend:80
+	}
+}

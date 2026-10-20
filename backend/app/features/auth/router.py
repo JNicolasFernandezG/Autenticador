@@ -3,6 +3,7 @@ from typing import Dict, Any
 from app.features.auth.schemas import (
     RegisterRequest,
     LoginRequest,
+    VerificarTokenRequest,
     ValidateServiceAccessRequest,
     BajaServicioRequest,
     AuthResponse,
@@ -10,6 +11,7 @@ from app.features.auth.schemas import (
 from app.features.auth.service import (
     register_usuario,
     authenticate_user,
+    verificar_token_magic_link,
     validate_service_access,
     dar_baja_usuario_servicio,
     format_user_response,
@@ -36,6 +38,15 @@ async def endpoint_register(req: RegisterRequest):
         "token": token,
         "user": user_data,
     }
+
+
+@router.post(
+    "/verificar-token",
+    response_model=AuthResponse,
+    summary="Verifica el token JWT de un Magic Link (/acceso?token=...) al ingresar a MayoresActualizaciones o ConmiJuegos",
+)
+async def endpoint_verificar_token(req: VerificarTokenRequest):
+    return await verificar_token_magic_link(req)
 
 
 @router.post(

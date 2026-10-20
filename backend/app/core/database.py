@@ -79,7 +79,7 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
         ]
         await db["estados_usuario"].insert_many(estados_iniciales)
 
-    # 2. Seed catálogo de servicios conectados al Autenticador
+    # 2. Seed catálogo de servicios conectados al Autenticador (con URL base para Magic Links independientes)
     servicios_count = await db["servicios_catalogo"].count_documents({})
     if servicios_count == 0:
         servicios_iniciales = [
@@ -87,6 +87,8 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
                 "clave": "mayoresactualizaciones",
                 "nombre": "Mayores Actualizaciones",
                 "descripcion": "Plataforma principal de cursos y actualizaciones (SIPI)",
+                "url_base": settings.MAYORES_FRONTEND_URL,
+                "ruta_magic_link": "/acceso",
                 "color": "indigo",
                 "activo": True,
             },
@@ -94,11 +96,48 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
                 "clave": "conmijuegos",
                 "nombre": "ConmiJuegos",
                 "descripcion": "Plataforma de entrenamiento cognitivo diario (Wordle, Sudoku, Sopa, Crucigrama)",
+                "url_base": settings.CONMIJUEGOS_FRONTEND_URL,
+                "ruta_magic_link": "/acceso",
                 "color": "teal",
                 "activo": True,
             },
         ]
         await db["servicios_catalogo"].insert_many(servicios_iniciales)
+    else:
+        # Sincronizar url_base desde las variables de entorno (.env) si tenían el valor local por defecto o no existían
+        await db["servicios_catalogo"].update_one(
+            {
+                "clave": "mayoresactualizaciones",
+                "$or": [
+                    {"url_base": {"$exists": False}},
+                    {"url_base": "http://localhost:3000"},
+                ],
+            },
+            {
+                "$set": {
+                    "url_base": settings.MAYORES_FRONTEND_URL,
+                    "ruta_magic_link": "/acceso",
+                }
+            },
+        )
+        await db["servicios_catalogo"].update_one(
+            {
+                "clave": "conmijuegos",
+                "$or": [
+                    {"url_base": {"$exists": False}},
+                    {"url_base": "http://localhost:5174"},
+                ],
+            },
+            {
+                "$set": {
+                    "url_base": settings.CONMIJUEGOS_FRONTEND_URL,
+                    "ruta_magic_link": "/acceso",
+                }
+            },
+        )
+
+    # Limpiar campo obsoleto `black` si existía en documentos previos
+    await db["usuarios"].update_many({"black": {"$exists": True}}, {"$unset": {"black": ""}})
 
     # 3. Seed usuario Administrador y usuarios de ejemplo si no existen
     admin_exists = await db["usuarios"].find_one({"email": "admin@autenticador.com"})
@@ -112,7 +151,6 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
                 "password_hash": hash_password("admin123"),
                 "codigo_acceso": "999999",
                 "tipo_usuario": 2,
-                "black": True,
                 "activo": True,
                 "estado_id": 2,
                 "estado_codigo": "ACTIVO",
@@ -130,7 +168,6 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
                 "password_hash": hash_password("123456"),
                 "codigo_acceso": "123456",
                 "tipo_usuario": 1,
-                "black": True,
                 "activo": True,
                 "estado_id": 2,
                 "estado_codigo": "ACTIVO",
@@ -148,7 +185,6 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
                 "password_hash": hash_password("654321"),
                 "codigo_acceso": "654321",
                 "tipo_usuario": 1,
-                "black": False,
                 "activo": True,
                 "estado_id": 2,
                 "estado_codigo": "ACTIVO",
@@ -166,7 +202,6 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
                 "password_hash": hash_password("112233"),
                 "codigo_acceso": "112233",
                 "tipo_usuario": 1,
-                "black": False,
                 "activo": False,
                 "estado_id": 3,
                 "estado_codigo": "SUSPENDIDO",

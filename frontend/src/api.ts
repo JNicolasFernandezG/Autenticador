@@ -1,11 +1,26 @@
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+const API_BASE =
+  (import.meta as any).env?.VITE_API_URL ||
+  (typeof window !== 'undefined' && window.location.port === '5173'
+    ? 'http://localhost:8000'
+    : '');
+
 
 export interface ServicioCatalogo {
   clave: string;
   nombre: string;
   descripcion: string;
+  url_base: string;
+  ruta_magic_link?: string;
   color: string;
   activo: boolean;
+}
+
+export interface MagicLinkServicioItem {
+  clave: string;
+  nombre: string;
+  urlBase: string;
+  accessUrl: string;
+  habilitado: boolean;
 }
 
 export interface EstadoUsuario {
@@ -24,7 +39,6 @@ export interface Usuario {
   email: string;
   codigoAcceso: string;
   tipoUsuario: number;
-  black: boolean;
   activo: boolean;
   estadoId: number;
   estadoCodigo: string;
@@ -80,7 +94,6 @@ export const api = {
       skip?: number;
       nombre?: string;
       tipoUsuario?: number;
-      black?: boolean;
       activo?: boolean;
       servicio?: string;
       orden?: string;
@@ -91,7 +104,6 @@ export const api = {
     if (params.skip !== undefined) qs.set('skip', String(params.skip));
     if (params.nombre) qs.set('nombre', params.nombre);
     if (params.tipoUsuario !== undefined) qs.set('tipoUsuario', String(params.tipoUsuario));
-    if (params.black !== undefined) qs.set('black', String(params.black));
     if (params.activo !== undefined) qs.set('activo', String(params.activo));
     if (params.servicio) qs.set('servicio', params.servicio);
     if (params.orden) qs.set('orden', params.orden);
@@ -109,7 +121,6 @@ export const api = {
       email: string;
       codigoAcceso?: string;
       tipoUsuario: number;
-      black: boolean;
       activo: boolean;
       servicios: Record<string, boolean>;
     }
@@ -124,25 +135,17 @@ export const api = {
 
   async toggleActivo(token: string, userId: number) {
     const res = await fetch(`${API_BASE}/usuario/${userId}/toggle-activo`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: getHeaders(token),
     });
     return handleResponse<{ success: boolean; message: string; activo: boolean }>(res);
-  },
-
-  async toggleBlack(token: string, userId: number) {
-    const res = await fetch(`${API_BASE}/usuario/${userId}/toggle-black`, {
-      method: 'PUT',
-      headers: getHeaders(token),
-    });
-    return handleResponse<{ success: boolean; message: string; black: boolean }>(res);
   },
 
   async toggleServicio(token: string, userId: number, servicioClave: string) {
     const res = await fetch(
       `${API_BASE}/usuario/${userId}/toggle-servicio/${encodeURIComponent(servicioClave)}`,
       {
-        method: 'PUT',
+        method: 'PATCH',
         headers: getHeaders(token),
       }
     );
@@ -157,7 +160,7 @@ export const api = {
 
   async cambiarEstado(token: string, userId: number, estadoId: number) {
     const res = await fetch(`${API_BASE}/usuario/${userId}/estado`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: getHeaders(token),
       body: JSON.stringify({ estado_id: estadoId }),
     });
@@ -181,6 +184,8 @@ export const api = {
       accessUrl: string;
       codigoAcceso: string;
       activo: boolean;
+      magicLinks: Record<string, MagicLinkServicioItem>;
+      magicLinksList: MagicLinkServicioItem[];
       message: string;
     }>(res);
   },
@@ -194,13 +199,41 @@ export const api = {
 
   async crearServicioCatalogo(
     token: string,
-    payload: { clave: string; nombre: string; descripcion?: string; color?: string }
+    payload: {
+      clave: string;
+      nombre: string;
+      url_base: string;
+      ruta_magic_link?: string;
+      descripcion?: string;
+      color?: string;
+    }
   ) {
     const res = await fetch(`${API_BASE}/usuario/servicios/catalogo`, {
       method: 'POST',
       headers: getHeaders(token),
       body: JSON.stringify(payload),
     });
+    return handleResponse<{ success: boolean; message: string; servicio: ServicioCatalogo }>(res);
+  },
+
+  async actualizarServicioCatalogo(
+    token: string,
+    clave: string,
+    payload: {
+      nombre?: string;
+      url_base?: string;
+      ruta_magic_link?: string;
+      descripcion?: string;
+    }
+  ) {
+    const res = await fetch(
+      `${API_BASE}/usuario/servicios/catalogo/${encodeURIComponent(clave)}`,
+      {
+        method: 'PATCH',
+        headers: getHeaders(token),
+        body: JSON.stringify(payload),
+      }
+    );
     return handleResponse<{ success: boolean; message: string; servicio: ServicioCatalogo }>(res);
   },
 
