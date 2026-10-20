@@ -16,6 +16,7 @@ import {
   Check,
   ExternalLink,
   Settings2,
+  Gamepad2,
 } from 'lucide-react';
 import {
   api,
@@ -29,6 +30,50 @@ export default function App() {
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem('auth_admin_token')
   );
+
+  // SSO State
+  const [jumpingToGames, setJumpingToGames] = useState(false);
+
+  // Detección automática de Ticket SSO al ingresar al panel
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ticketParam = params.get('ticket');
+    if (ticketParam) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setLoading(true);
+      api.consumirTicketSSO(ticketParam, 'autenticador')
+        .then((res) => {
+          localStorage.setItem('auth_admin_token', res.token);
+          localStorage.setItem('auth_admin_user', JSON.stringify(res.user));
+          setToken(res.token);
+          setAdminUser(res.user);
+          notify(`Bienvenido vía SSO: ${res.user.name}`);
+        })
+        .catch((err: any) => {
+          console.error('Error al canjear ticket SSO:', err);
+          notify(err.message || 'Ticket SSO inválido o expirado', 'err');
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, []);
+
+  const handleIrAJuegosAdmin = async () => {
+    if (!token || jumpingToGames) return;
+    setJumpingToGames(true);
+    try {
+      const res = await api.generarTicketSSO(token, 'mayoresactualizaciones');
+      if (res && res.ticket) {
+        const juegosAdminUrl = (import.meta as any).env?.VITE_JUEGOS_ADMIN_URL || 'http://localhost:8082/admin';
+        window.location.href = `${juegosAdminUrl}?ticket=${encodeURIComponent(res.ticket)}`;
+      }
+    } catch (err: any) {
+      console.error('Error al generar ticket SSO hacia Juegos:', err);
+      notify(err.message || 'Error al iniciar salto SSO hacia Juegos', 'err');
+      setJumpingToGames(false);
+    }
+  };
   const [adminUser, setAdminUser] = useState<Usuario | null>(() => {
     const raw = localStorage.getItem('auth_admin_user');
     return raw ? JSON.parse(raw) : null;
@@ -472,6 +517,15 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleIrAJuegosAdmin}
+              disabled={jumpingToGames}
+              className="px-3 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/30 transition disabled:opacity-50 cursor-pointer"
+              title="Acceder a la Torre de Control de Juegos sin ingresar credenciales (SSO)"
+            >
+              <Gamepad2 className="w-3.5 h-3.5 text-emerald-400" />
+              {jumpingToGames ? 'Conectando...' : 'Torre de Juegos (SSO)'}
+            </button>
             <button
               onClick={() => setShowNewServiceModal(true)}
               className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"

@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.database import connect_to_mongo, close_mongo_connection, get_database
 from app.features.auth.router import router as auth_router
 from app.features.usuario.router import router as usuario_router
+from app.features.sso import router as sso_router
 
 
 @asynccontextmanager
@@ -104,6 +105,8 @@ app.include_router(auth_router)
 app.include_router(auth_router, prefix="/api", include_in_schema=False)
 app.include_router(usuario_router)
 app.include_router(usuario_router, prefix="/api", include_in_schema=False)
+app.include_router(sso_router)
+app.include_router(sso_router, prefix="/api", include_in_schema=False)
 
 
 @app.get("/health", tags=["Healthcheck"])

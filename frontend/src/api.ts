@@ -262,4 +262,31 @@ export const api = {
       user?: Usuario;
     }>(res);
   },
+  async generarTicketSSO(token: string, servicioDestino: string = 'mayoresactualizaciones') {
+    const res = await fetch(`${API_BASE}/auth/sso/create-ticket`, {
+      method: 'POST',
+      headers: getHeaders(token),
+      body: JSON.stringify({ servicio: servicioDestino }),
+    });
+    return handleResponse<{
+      success: boolean;
+      ticket: string;
+      expiresInSeconds: number;
+      servicio: string;
+    }>(res);
+  },
+
+  async consumirTicketSSO(ticket: string, servicioSolicitante: string = 'autenticador') {
+    const res = await fetch(`${API_BASE}/auth/sso/consume-ticket`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ ticket, servicio: servicioSolicitante }),
+    });
+    return handleResponse<{
+      success: boolean;
+      token: string;
+      user: Usuario;
+      message: string;
+    }>(res);
+  },
 };

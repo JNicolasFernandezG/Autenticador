@@ -24,6 +24,8 @@ async def connect_to_mongo() -> None:
     await db["estados_usuario"].create_index("id", unique=True)
     await db["estados_usuario"].create_index("codigo", unique=True)
     await db["servicios_catalogo"].create_index("clave", unique=True)
+    await db["sso_tickets"].create_index("ticket", unique=True)
+    await db["sso_tickets"].create_index("expira_en", expireAfterSeconds=0)
     await seed_initial_data(db)
 
 
