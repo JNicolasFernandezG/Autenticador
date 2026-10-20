@@ -13,7 +13,7 @@ class Settings:
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     SERVICE_API_KEY: str = os.getenv("SERVICE_API_KEY", "")
     FRONTEND_URL: str = os.getenv(
-        "FRONTEND_URL", "https://autenticador.asistodo.com.ar"
+        "FRONTEND_URL", "https://autenticacion.asistodo.com.ar"
     ).rstrip("/")
     MAYORES_FRONTEND_URL: str = os.getenv(
         "MAYORES_FRONTEND_URL", "https://mayoresactualizaciones.asistodo.com.ar"
@@ -25,7 +25,7 @@ class Settings:
         o.strip()
         for o in os.getenv(
             "CORS_ORIGINS",
-            "https://autenticador.asistodo.com.ar,https://mayoresactualizaciones.asistodo.com.ar,https://cognijuegos.asistodo.com.ar,http://localhost:5173,http://localhost:3000,http://localhost:5174",
+            "https://autenticacion.asistodo.com.ar,https://mayoresactualizaciones.asistodo.com.ar,https://cognijuegos.asistodo.com.ar,http://localhost:5173,http://localhost:3000,http://localhost:5174",
         ).split(",")
         if o.strip()
     ]

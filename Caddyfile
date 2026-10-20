@@ -1,7 +1,7 @@
 # ============================================================================
 # Caddyfile — Autenticador Central (BUENAS PRÁCTICAS BB)
 # Escucha internamente en :80 (expuesto en el host en el puerto 8086)
-# Dominio público: https://autenticador.asistodo.com.ar
+# Dominio público: https://autenticacion.asistodo.com.ar
 # ============================================================================
 
 :80 {
