@@ -65,7 +65,7 @@ export default function App() {
     try {
       const res = await api.generarTicketSSO(token, 'mayoresactualizaciones');
       if (res && res.ticket) {
-        const juegosAdminUrl = (import.meta as any).env?.VITE_JUEGOS_ADMIN_URL || 'http://localhost:8082/admin';
+        const juegosAdminUrl = (import.meta as any).env?.VITE_JUEGOS_ADMIN_URL || 'https://cognijuegos.asistodo.com.ar/admin';
         window.location.href = `${juegosAdminUrl}?ticket=${encodeURIComponent(res.ticket)}`;
       }
     } catch (err: any) {
@@ -129,7 +129,7 @@ export default function App() {
   // New service form
   const [srvClave, setSrvClave] = useState('');
   const [srvNombre, setSrvNombre] = useState('');
-  const [srvUrlBase, setSrvUrlBase] = useState('http://localhost:3000');
+  const [srvUrlBase, setSrvUrlBase] = useState('https://mayoresactualizaciones.asistodo.com.ar');
   const [srvRutaMagic, setSrvRutaMagic] = useState('/acceso');
   const [srvDesc, setSrvDesc] = useState('');
 
@@ -332,7 +332,7 @@ export default function App() {
       setShowNewServiceModal(false);
       setSrvClave('');
       setSrvNombre('');
-      setSrvUrlBase('http://localhost:3000');
+      setSrvUrlBase('https://mayoresactualizaciones.asistodo.com.ar');
       setSrvRutaMagic('/acceso');
       setSrvDesc('');
       fetchCatalogs();
@@ -456,7 +456,7 @@ export default function App() {
             clave: 'mayoresactualizaciones',
             nombre: 'Mayores Actualizaciones',
             descripcion: 'Plataforma SIPI',
-            url_base: 'http://localhost:3000',
+            url_base: 'https://mayoresactualizaciones.asistodo.com.ar',
             ruta_magic_link: '/acceso',
             color: 'indigo',
             activo: true,
@@ -465,7 +465,7 @@ export default function App() {
             clave: 'conmijuegos',
             nombre: 'ConmiJuegos',
             descripcion: 'Entrenamiento Cognitivo',
-            url_base: 'http://localhost:5174',
+            url_base: 'https://cognijuegos.asistodo.com.ar',
             ruta_magic_link: '/acceso',
             color: 'teal',
             activo: true,
