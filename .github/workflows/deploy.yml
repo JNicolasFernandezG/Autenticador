@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -12,6 +13,8 @@ jobs:
 
     steps:
       - name: Desplegar en servidor Linux (serverportable)
+        env:
+          ENV_PROD: ${{ secrets.ENV_PROD }}
         run: |
           if [ -d "/home/serverportable/Documentos/Autenticador/Autenticador/.git" ]; then
             cd /home/serverportable/Documentos/Autenticador/Autenticador
@@ -20,6 +23,18 @@ jobs:
           fi
           git fetch origin main
           git reset --hard origin/main
+
+          # Inyección segura de variables de entorno (.env)
+          printf "%s\n" "$ENV_PROD" > .env
+          chmod 600 .env
+          unset ENV_PROD
+
+          # Garantizar la eliminación del archivo .env al terminar o si ocurre un error
+          trap 'rm -f .env' EXIT
+
           docker compose -f docker-compose.db.yml up -d
           docker compose up -d --build --remove-orphans
           docker image prune -f
+
+          # Eliminación del archivo .env inmediatamente tras el despliegue
+          rm -f .env
