@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
@@ -141,81 +142,30 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
     # Limpiar campo obsoleto `black` si existía en documentos previos
     await db["usuarios"].update_many({"black": {"$exists": True}}, {"$unset": {"black": ""}})
 
-    # 3. Seed usuario Administrador y usuarios de ejemplo SOLO si se habilita explícitamente en .env
-    admin_exists = await db["usuarios"].find_one({"email": "admin@autenticador.com"})
-    should_seed = os.getenv("SEED_INITIAL_DATA", "false").lower() in ("true", "1", "yes")
-    if not admin_exists and should_seed:
-        admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
-        admin_pin = os.getenv("ADMIN_DEFAULT_PIN", "999999")
+    # 3. Inicialización opcional de Administrador Central SOLO si la base de datos está completamente vacía
+    total_usuarios = await db["usuarios"].count_documents({})
+    admin_email = os.getenv("ADMIN_EMAIL") or os.getenv("ADMIN_DEFAULT_EMAIL")
+    admin_password = os.getenv("ADMIN_PASSWORD") or os.getenv("ADMIN_DEFAULT_PASSWORD")
+    admin_pin = os.getenv("ADMIN_PIN") or os.getenv("ADMIN_DEFAULT_PIN")
+
+    if total_usuarios == 0 and admin_email and admin_password and admin_pin:
         now = datetime.utcnow()
-        usuarios_semilla = [
-            {
-                "id": 1,
-                "name": "Administrador Central",
-                "email": "admin@autenticador.com",
-                "password_hash": hash_password(admin_password),
-                "codigo_acceso": admin_pin,
-                "tipo_usuario": 2,
-                "activo": True,
-                "estado_id": 2,
-                "estado_codigo": "ACTIVO",
-                "servicios": {
-                    "mayoresactualizaciones": True,
-                    "conmijuegos": True,
-                },
-                "date_start": now,
-                "date_end": None,
+        admin_doc = {
+            "id": 1,
+            "name": os.getenv("ADMIN_NAME") or os.getenv("ADMIN_DEFAULT_NAME") or "Administrador Central",
+            "email": admin_email.strip().lower(),
+            "password_hash": hash_password(admin_password.strip()),
+            "codigo_acceso": admin_pin.strip(),
+            "tipo_usuario": 2,
+            "activo": True,
+            "estado_id": 2,
+            "estado_codigo": "ACTIVO",
+            "servicios": {
+                "mayoresactualizaciones": True,
+                "conmijuegos": True,
             },
-            {
-                "id": 2,
-                "name": "Marta González",
-                "email": "marta.gonzalez@ejemplo.com",
-                "password_hash": hash_password("123456"),
-                "codigo_acceso": "123456",
-                "tipo_usuario": 1,
-                "activo": True,
-                "estado_id": 2,
-                "estado_codigo": "ACTIVO",
-                "servicios": {
-                    "mayoresactualizaciones": True,
-                    "conmijuegos": True,
-                },
-                "date_start": now,
-                "date_end": None,
-            },
-            {
-                "id": 3,
-                "name": "Roberto Carlos Méndez",
-                "email": "roberto.mendez@ejemplo.com",
-                "password_hash": hash_password("654321"),
-                "codigo_acceso": "654321",
-                "tipo_usuario": 1,
-                "activo": True,
-                "estado_id": 2,
-                "estado_codigo": "ACTIVO",
-                "servicios": {
-                    "mayoresactualizaciones": False,
-                    "conmijuegos": True,
-                },
-                "date_start": now,
-                "date_end": None,
-            },
-            {
-                "id": 4,
-                "name": "Elena Beatriz Gómez",
-                "email": "elena.gomez@ejemplo.com",
-                "password_hash": hash_password("112233"),
-                "codigo_acceso": "112233",
-                "tipo_usuario": 1,
-                "activo": False,
-                "estado_id": 3,
-                "estado_codigo": "SUSPENDIDO",
-                "servicios": {
-                    "mayoresactualizaciones": True,
-                    "conmijuegos": False,
-                },
-                "date_start": now,
-                "date_end": None,
-            },
-        ]
-        await db["usuarios"].insert_many(usuarios_semilla)
+            "date_start": now,
+            "date_end": None,
+        }
+        await db["usuarios"].insert_one(admin_doc)
+
