@@ -141,17 +141,20 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
     # Limpiar campo obsoleto `black` si existía en documentos previos
     await db["usuarios"].update_many({"black": {"$exists": True}}, {"$unset": {"black": ""}})
 
-    # 3. Seed usuario Administrador y usuarios de ejemplo si no existen
+    # 3. Seed usuario Administrador y usuarios de ejemplo SOLO si se habilita explícitamente en .env
     admin_exists = await db["usuarios"].find_one({"email": "admin@autenticador.com"})
-    if not admin_exists:
+    should_seed = os.getenv("SEED_INITIAL_DATA", "false").lower() in ("true", "1", "yes")
+    if not admin_exists and should_seed:
+        admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
+        admin_pin = os.getenv("ADMIN_DEFAULT_PIN", "999999")
         now = datetime.utcnow()
         usuarios_semilla = [
             {
                 "id": 1,
                 "name": "Administrador Central",
                 "email": "admin@autenticador.com",
-                "password_hash": hash_password("admin123"),
-                "codigo_acceso": "999999",
+                "password_hash": hash_password(admin_password),
+                "codigo_acceso": admin_pin,
                 "tipo_usuario": 2,
                 "activo": True,
                 "estado_id": 2,

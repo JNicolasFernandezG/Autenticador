@@ -8,6 +8,7 @@ load_dotenv()
 class Settings:
     PROJECT_NAME: str = "Autenticador Central - Torre de Control"
     MONGODB_URL: str = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+    DATABASE_NAME: str = os.getenv("DATABASE_NAME", "autenticador_db")
     JWT_SECRET: str = os.getenv("JWT_SECRET", "")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     SERVICE_API_KEY: str = os.getenv("SERVICE_API_KEY", "")
