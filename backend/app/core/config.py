@@ -1,8 +1,15 @@
 import os
+from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
 
-load_dotenv()
+# Cargar archivo .env unificado desde la raíz del proyecto Autenticador
+ROOT_DIR = Path(__file__).resolve().parents[3]
+root_env = ROOT_DIR / ".env"
+if root_env.exists():
+    load_dotenv(dotenv_path=root_env)
+else:
+    load_dotenv()
 
 
 class Settings:
