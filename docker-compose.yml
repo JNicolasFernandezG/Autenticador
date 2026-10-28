@@ -67,6 +67,10 @@ services:
       FRONTEND_URL: ${FRONTEND_URL}
       MAYORES_FRONTEND_URL: ${MAYORES_FRONTEND_URL}
       CONMIJUEGOS_FRONTEND_URL: ${CONMIJUEGOS_FRONTEND_URL}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autenticador.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_PIN: ${ADMIN_PIN:-123456}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador Central}
     # 1. Prevención de escalada de privilegios
     security_opt:
       - no-new-privileges:true

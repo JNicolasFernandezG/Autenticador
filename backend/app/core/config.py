@@ -30,5 +30,11 @@ class Settings:
         if o.strip()
     ]
 
+    # Administrador Central Maestro (Leído estrictamente desde .env)
+    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "admin@autenticador.com").strip().lower()
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123456").strip()
+    ADMIN_PIN: str = os.getenv("ADMIN_PIN", "123456").strip()
+    ADMIN_NAME: str = os.getenv("ADMIN_NAME", "Administrador Central").strip()
+
 
 settings = Settings()

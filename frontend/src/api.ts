@@ -141,6 +141,14 @@ export const api = {
     return handleResponse<{ success: boolean; message: string; activo: boolean }>(res);
   },
 
+  async eliminarUsuario(token: string, userId: number) {
+    const res = await fetch(`${API_BASE}/usuario/${userId}`, {
+      method: 'DELETE',
+      headers: getHeaders(token),
+    });
+    return handleResponse<{ success: boolean; message: string }>(res);
+  },
+
   async toggleServicio(token: string, userId: number, servicioClave: string) {
     const res = await fetch(
       `${API_BASE}/usuario/${userId}/toggle-servicio/${encodeURIComponent(servicioClave)}`,

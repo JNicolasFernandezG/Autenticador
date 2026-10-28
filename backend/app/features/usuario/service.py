@@ -79,6 +79,12 @@ async def toggle_activo(user_id: int) -> Dict[str, Any]:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Usuario con ID {user_id} no encontrado",
         )
+    admin_email = getattr(settings, "ADMIN_EMAIL", "admin@autenticador.com").lower()
+    if user.get("email") == admin_email or user.get("tipo_usuario") == 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cuenta de Administrador Central está protegida y no puede ser desactivada ni suspendida.",
+        )
     current_state = bool(user.get("activo", True))
     new_state = not current_state
     new_estado_id = 2 if new_state else 3
@@ -108,6 +114,12 @@ async def toggle_servicio_usuario(user_id: int, servicio_clave: str) -> Dict[str
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Usuario con ID {user_id} no encontrado",
+        )
+    admin_email = getattr(settings, "ADMIN_EMAIL", "admin@autenticador.com").lower()
+    if user.get("email") == admin_email or user.get("tipo_usuario") == 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cuenta de Administrador Central tiene acceso permanente a todos los servicios.",
         )
     clave = re.sub(r"[^a-z0-9_-]+", "", servicio_clave.strip().lower())
     if not clave:
@@ -318,6 +330,12 @@ async def cambiar_estado_usuario(user_id: int, estado_id: int) -> Dict[str, Any]
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Usuario con ID {user_id} no encontrado",
         )
+    admin_email = getattr(settings, "ADMIN_EMAIL", "admin@autenticador.com").lower()
+    if (user.get("email") == admin_email or user.get("tipo_usuario") == 2) and estado_id != 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cuenta de Administrador Central debe permanecer siempre en estado ACTIVO.",
+        )
     estado = await db["estados_usuario"].find_one({"id": estado_id})
     if not estado:
         raise HTTPException(
@@ -422,4 +440,25 @@ async def toggle_habilitado_estado(estado_id: int) -> Dict[str, Any]:
         "message": f"Estado '{estado.get('nombre')}' {action_text} en el catálogo.",
         "estado_id": estado_id,
         "habilitado": nuevo_habilitado,
+    }
+
+
+async def eliminar_usuario(user_id: int) -> Dict[str, Any]:
+    db = get_database()
+    user = await db["usuarios"].find_one({"id": user_id})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Usuario con ID {user_id} no encontrado",
+        )
+    admin_email = getattr(settings, "ADMIN_EMAIL", "admin@autenticador.com").lower()
+    if user.get("email") == admin_email or user.get("tipo_usuario") == 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cuenta de Administrador Central está blindada y no puede ser eliminada.",
+        )
+    await db["usuarios"].delete_one({"id": user_id})
+    return {
+        "success": True,
+        "message": f"Usuario #{user_id} ('{user.get('name')}') eliminado permanentemente con éxito.",
     }

@@ -1,9 +1,12 @@
 import os
+import logging
 from datetime import datetime
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.core.config import settings
 from app.core.security import hash_password
+
+logger = logging.getLogger("Database")
 
 _client: Optional[AsyncIOMotorClient] = None
 _db: Optional[AsyncIOMotorDatabase] = None
@@ -36,6 +39,18 @@ async def close_mongo_connection() -> None:
         _client.close()
         _client = None
         _db = None
+
+
+async def get_next_sequence_value(sequence_name: str) -> int:
+    """Genera IDs numéricos autoincrementales."""
+    db = get_database()
+    res = await db["counters"].find_one_and_update(
+        {"_id": sequence_name},
+        {"$inc": {"sequence_value": 1}},
+        upsert=True,
+        return_document=True
+    )
+    return res["sequence_value"]
 
 
 async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
@@ -142,18 +157,20 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
     # Limpiar campo obsoleto `black` si existía en documentos previos
     await db["usuarios"].update_many({"black": {"$exists": True}}, {"$unset": {"black": ""}})
 
-    # 3. Inicialización opcional de Administrador Central SOLO si la base de datos está completamente vacía
-    total_usuarios = await db["usuarios"].count_documents({})
-    admin_email = os.getenv("ADMIN_EMAIL") or os.getenv("ADMIN_DEFAULT_EMAIL")
-    admin_password = os.getenv("ADMIN_PASSWORD") or os.getenv("ADMIN_DEFAULT_PASSWORD")
-    admin_pin = os.getenv("ADMIN_PIN") or os.getenv("ADMIN_DEFAULT_PIN")
+    # 3. Inicialización y blindaje obligatorio del Administrador Central desde variables de entorno (.env)
+    admin_email = (getattr(settings, "ADMIN_EMAIL", None) or os.getenv("ADMIN_EMAIL") or "admin@autenticador.com").strip().lower()
+    admin_password = getattr(settings, "ADMIN_PASSWORD", None) or os.getenv("ADMIN_PASSWORD") or "admin123456"
+    admin_pin = getattr(settings, "ADMIN_PIN", None) or os.getenv("ADMIN_PIN") or "123456"
+    admin_name = getattr(settings, "ADMIN_NAME", None) or os.getenv("ADMIN_NAME") or "Administrador Central"
 
-    if total_usuarios == 0 and admin_email and admin_password and admin_pin:
-        now = datetime.utcnow()
+    existing_admin = await db["usuarios"].find_one({"email": admin_email})
+    now = datetime.utcnow()
+    if not existing_admin:
+        next_id = await get_next_sequence_value("usuarios_id")
         admin_doc = {
-            "id": 1,
-            "name": os.getenv("ADMIN_NAME") or os.getenv("ADMIN_DEFAULT_NAME") or "Administrador Central",
-            "email": admin_email.strip().lower(),
+            "id": next_id if next_id else 1,
+            "name": admin_name,
+            "email": admin_email,
             "password_hash": hash_password(admin_password.strip()),
             "codigo_acceso": admin_pin.strip(),
             "tipo_usuario": 2,
@@ -168,4 +185,24 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
             "date_end": None,
         }
         await db["usuarios"].insert_one(admin_doc)
+        logger.info(f"[INIT] Administrador Central creado exitosamente: {admin_email}")
+    else:
+        # Asegurar blindaje permanente del rol administrador y estado activo
+        update_doc = {
+            "tipo_usuario": 2,
+            "activo": True,
+            "estado_id": 2,
+            "estado_codigo": "ACTIVO",
+            "servicios.mayoresactualizaciones": True,
+            "servicios.conmijuegos": True,
+        }
+        if admin_password:
+            update_doc["password_hash"] = hash_password(admin_password.strip())
+        if admin_pin:
+            update_doc["codigo_acceso"] = admin_pin.strip()
 
+        await db["usuarios"].update_one(
+            {"email": admin_email},
+            {"$set": update_doc}
+        )
+        logger.info(f"[INIT] Administrador Central verificado y blindado como permanente: {admin_email}")

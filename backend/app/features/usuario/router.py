@@ -28,6 +28,7 @@ from app.features.usuario.service import (
     cambiar_estado_usuario,
     crear_estado_usuario,
     toggle_habilitado_estado,
+    eliminar_usuario,
 )
 from app.features.auth.schemas import RegisterRequest
 from app.features.auth.service import register_usuario
@@ -255,3 +256,14 @@ async def endpoint_generar_magic_link(
     admin: Dict[str, Any] = Depends(get_current_admin),
 ):
     return await generar_magic_links_por_servicio(user_id, servicio_especifico=servicio)
+
+
+@router.delete(
+    "/{user_id}",
+    summary="Eliminar permanentemente una cuenta de usuario (Solo Admin)",
+)
+async def endpoint_eliminar_usuario(
+    user_id: int,
+    admin: Dict[str, Any] = Depends(get_current_admin),
+):
+    return await eliminar_usuario(user_id)

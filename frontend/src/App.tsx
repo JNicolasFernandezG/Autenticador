@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Settings2,
   Gamepad2,
+  Trash2,
 } from 'lucide-react';
 import {
   api,
@@ -249,6 +250,27 @@ export default function App() {
             : u
         )
       );
+      notify(res.message, 'ok');
+    } catch (err: any) {
+      notify(err.message, 'err');
+    }
+  };
+
+  const handleEliminarUsuario = async (u: Usuario) => {
+    if (!token) return;
+    if (u.tipoUsuario === 2 || u.email.toLowerCase() === 'admin@autenticador.com') {
+      notify('La cuenta de Administrador Central está protegida y no puede ser eliminada.', 'err');
+      return;
+    }
+    const ok = window.confirm(
+      `¿Estás seguro de que deseas eliminar permanentemente al usuario #${u.id} (${u.name} - ${u.email})?\nEsta acción no se puede deshacer.`
+    );
+    if (!ok) return;
+
+    try {
+      const res = await api.eliminarUsuario(token, u.id);
+      setUsuarios((prev) => prev.filter((item) => item.id !== u.id));
+      setTotal((prev) => Math.max(0, prev - 1));
       notify(res.message, 'ok');
     } catch (err: any) {
       notify(err.message, 'err');
@@ -732,16 +754,24 @@ export default function App() {
                       <td className="py-3.5 px-4">
                         <div className="flex flex-wrap gap-2">
                           {clavesServicios.map((srv) => {
-                            const tiene = Boolean(u.servicios?.[srv.clave]);
+                            const isMasterAdmin = (u.tipoUsuario === 2 || u.email.toLowerCase() === 'admin@autenticador.com');
+                            const tiene = isMasterAdmin ? true : Boolean(u.servicios?.[srv.clave]);
                             return (
                               <button
                                 key={srv.clave}
-                                onClick={() => handleToggleServicio(u.id, srv.clave)}
-                                title={`Clic para ${
-                                  tiene ? 'deshabilitar' : 'habilitar'
-                                } acceso a ${srv.nombre} (${srv.clave})`}
+                                disabled={isMasterAdmin}
+                                onClick={() => !isMasterAdmin && handleToggleServicio(u.id, srv.clave)}
+                                title={
+                                  isMasterAdmin
+                                    ? `Administrador Central: acceso permanente a ${srv.nombre}`
+                                    : `Clic para ${
+                                        tiene ? 'deshabilitar' : 'habilitar'
+                                      } acceso a ${srv.nombre} (${srv.clave})`
+                                }
                                 className={`px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition ${
-                                  tiene
+                                  isMasterAdmin
+                                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 opacity-80 cursor-default'
+                                    : tiene
                                     ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
                                     : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300'
                                 }`}
@@ -759,21 +789,27 @@ export default function App() {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <select
-                          value={u.estadoId}
-                          onChange={(e) => handleCambiarEstado(u.id, Number(e.target.value))}
-                          className={`text-xs font-semibold px-2.5 py-1 rounded-lg border bg-slate-950 focus:outline-none ${
-                            u.activo
-                              ? 'border-emerald-500/40 text-emerald-300'
-                              : 'border-rose-500/40 text-rose-300'
-                          }`}
-                        >
-                          {estadosCatalogo.map((est) => (
-                            <option key={est.id} value={est.id}>
-                              {est.codigo}
-                            </option>
-                          ))}
-                        </select>
+                        {(u.tipoUsuario === 2 || u.email.toLowerCase() === 'admin@autenticador.com') ? (
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-emerald-500/40 text-emerald-300 bg-slate-950 select-none">
+                            ACTIVO
+                          </span>
+                        ) : (
+                          <select
+                            value={u.estadoId}
+                            onChange={(e) => handleCambiarEstado(u.id, Number(e.target.value))}
+                            className={`text-xs font-semibold px-2.5 py-1 rounded-lg border bg-slate-950 focus:outline-none ${
+                              u.activo
+                                ? 'border-emerald-500/40 text-emerald-300'
+                                : 'border-rose-500/40 text-rose-300'
+                            }`}
+                          >
+                            {estadosCatalogo.map((est) => (
+                              <option key={est.id} value={est.id}>
+                                {est.codigo}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-4 text-right">
@@ -786,16 +822,20 @@ export default function App() {
                             Magic Links
                           </button>
 
-                          <button
-                            onClick={() => handleToggleActivo(u.id)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
-                              u.activo
-                                ? 'bg-rose-500/10 border-rose-500/30 text-rose-300 hover:bg-rose-500/20'
-                                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
-                            }`}
-                          >
-                            {u.activo ? 'Suspender' : 'Activar'}
-                          </button>
+                          {(u.tipoUsuario === 2 || u.email.toLowerCase() === 'admin@autenticador.com') ? (
+                            <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 select-none">
+                              Admin Protegido
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleEliminarUsuario(u)}
+                              title="Eliminar permanentemente este usuario de la base de datos"
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 flex items-center gap-1.5 transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                              Eliminar
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
