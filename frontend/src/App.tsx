@@ -64,7 +64,7 @@ export default function App() {
     if (!token || jumpingToGames) return;
     setJumpingToGames(true);
     try {
-      const res = await api.generarTicketSSO(token, 'mayoresactualizaciones');
+      const res = await api.generarTicketSSO(token, 'cognijuegos');
       if (res && res.ticket) {
         const juegosAdminUrl = (import.meta as any).env?.VITE_JUEGOS_ADMIN_URL || 'https://cognijuegos.asistodo.com.ar/admin';
         window.location.href = `${juegosAdminUrl}?ticket=${encodeURIComponent(res.ticket)}`;
@@ -124,7 +124,7 @@ export default function App() {
   const [newTipo, setNewTipo] = useState(1);
   const [newServicios, setNewServicios] = useState<Record<string, boolean>>({
     mayoresactualizaciones: true,
-    conmijuegos: true,
+    cognijuegos: true,
   });
 
   // New service form
@@ -484,8 +484,8 @@ export default function App() {
             activo: true,
           },
           {
-            clave: 'conmijuegos',
-            nombre: 'ConmiJuegos',
+            clave: 'cognijuegos',
+            nombre: 'CogniJuegos',
             descripcion: 'Entrenamiento Cognitivo',
             url_base: 'https://cognijuegos.asistodo.com.ar',
             ruta_magic_link: '/acceso',
@@ -533,7 +533,7 @@ export default function App() {
               <p className="text-xs text-slate-400">
                 Gestión de cuentas y Magic Links independientes por servicio (
                 <code className="text-indigo-300">mayoresactualizaciones</code>,{' '}
-                <code className="text-teal-300">conmijuegos</code>, etc.)
+                <code className="text-teal-300">cognijuegos</code>, etc.)
               </p>
             </div>
           </div>
@@ -880,7 +880,7 @@ export default function App() {
               </h2>
               <p className="text-xs text-slate-400">
                 Simulá la petición que realiza el backend de{' '}
-                <code>mayoresactualizaciones</code> o <code>conmijuegos</code> al contenedor del
+                <code>mayoresactualizaciones</code> o <code>cognijuegos</code> al contenedor del
                 Autenticador para validar si un usuario puede ingresar.
               </p>
             </div>

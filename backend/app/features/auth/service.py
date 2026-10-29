@@ -33,9 +33,10 @@ def format_user_response(doc: Dict[str, Any]) -> Dict[str, Any]:
     else:
         date_end_str = str(date_end) if date_end else None
 
-    servicios = doc.get("servicios") or {
-        "mayoresactualizaciones": False,
-        "conmijuegos": False,
+    raw_servicios = doc.get("servicios") or {}
+    servicios = {
+        "mayoresactualizaciones": bool(raw_servicios.get("mayoresactualizaciones", False)),
+        "cognijuegos": bool(raw_servicios.get("cognijuegos", False)),
     }
 
     return {
@@ -52,6 +53,13 @@ def format_user_response(doc: Dict[str, Any]) -> Dict[str, Any]:
         "dateStart": date_start_str,
         "dateEnd": date_end_str,
     }
+
+
+def check_service_permission(servicios_user: Dict[str, Any], tipo_usuario: int, clave_srv: str) -> bool:
+    if tipo_usuario == 2:
+        return True
+    clave = (clave_srv or "").strip().lower()
+    return bool(servicios_user.get(clave, False))
 
 
 async def _generate_unique_pin(db) -> str:
@@ -106,7 +114,7 @@ async def register_usuario(req: RegisterRequest, is_admin_creation: bool = False
     catalogo_docs = await catalogo_cursor.to_list(length=100)
     servicios_map: Dict[str, bool] = {d["clave"]: False for d in catalogo_docs}
     servicios_map.setdefault("mayoresactualizaciones", False)
-    servicios_map.setdefault("conmijuegos", False)
+    servicios_map.setdefault("cognijuegos", False)
 
     if req.servicios:
         for k, v in req.servicios.items():
@@ -117,7 +125,7 @@ async def register_usuario(req: RegisterRequest, is_admin_creation: bool = False
         servicios_map[clave_origen] = True
     elif not req.servicios:
         servicios_map["mayoresactualizaciones"] = True
-        servicios_map["conmijuegos"] = True
+        servicios_map["cognijuegos"] = True
 
     es_activo = bool(req.activo)
     estado_id = 2 if es_activo else 3
@@ -183,7 +191,7 @@ async def authenticate_user(req: LoginRequest) -> Dict[str, Any]:
     if req.servicio and req.servicio.strip():
         clave_srv = req.servicio.strip().lower()
         servicios_user = user.get("servicios") or {}
-        if user.get("tipo_usuario") != 2 and not servicios_user.get(clave_srv, False):
+        if not check_service_permission(servicios_user, user.get("tipo_usuario", 1), clave_srv):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"El usuario no posee permisos activos para el servicio '{clave_srv}'.",
@@ -202,7 +210,7 @@ async def authenticate_user(req: LoginRequest) -> Dict[str, Any]:
 async def verificar_token_magic_link(req: VerificarTokenRequest) -> Dict[str, Any]:
     """
     Valida el token JWT recibido desde un Magic Link (/acceso?token=...)
-    cuando el alumno ingresa a MayoresActualizaciones o a ConmiJuegos.
+    cuando el alumno ingresa a MayoresActualizaciones o a CogniJuegos.
     """
     payload = decode_access_token(req.token)
     user_id = payload.get("id")
@@ -229,7 +237,7 @@ async def verificar_token_magic_link(req: VerificarTokenRequest) -> Dict[str, An
     clave_srv = (req.servicio or payload.get("servicio_destino") or "").strip().lower()
     if clave_srv:
         servicios_user = user.get("servicios") or {}
-        if user.get("tipo_usuario") != 2 and not servicios_user.get(clave_srv, False):
+        if not check_service_permission(servicios_user, user.get("tipo_usuario", 1), clave_srv):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"El usuario '{user.get('name')}' no tiene habilitado el acceso a '{clave_srv}'.",
@@ -254,16 +262,26 @@ async def validate_service_access(req: ValidateServiceAccessRequest) -> Dict[str
         user = await db["usuarios"].find_one({"id": int(payload.get("id", 0))})
     elif req.userId is not None:
         user = await db["usuarios"].find_one({"id": int(req.userId)})
+    elif req.email and req.codigoAcceso:
+        user = await db["usuarios"].find_one({
+            "email": req.email.strip().lower(),
+            "codigo_acceso": req.codigoAcceso.strip()
+        })
     elif req.email:
         user = await db["usuarios"].find_one({"email": req.email.strip().lower()})
     elif req.codigoAcceso:
         user = await db["usuarios"].find_one({"codigo_acceso": req.codigoAcceso.strip()})
 
     if not user:
+        msg = "El usuario no existe en la base de datos del Autenticador."
+        if req.email and req.codigoAcceso:
+            msg = "El correo electrónico o la clave de 6 dígitos es incorrecta."
+        elif req.codigoAcceso:
+            msg = "Código de acceso no encontrado."
         return {
             "success": False,
             "allowed": False,
-            "message": "El usuario no existe en la base de datos del Autenticador.",
+            "message": msg,
             "token": None,
             "user": None,
         }
@@ -279,7 +297,7 @@ async def validate_service_access(req: ValidateServiceAccessRequest) -> Dict[str
 
     clave_srv = req.servicio.strip().lower()
     servicios_user = user.get("servicios") or {}
-    tiene_permiso = bool(user.get("tipo_usuario") == 2 or servicios_user.get(clave_srv, False))
+    tiene_permiso = check_service_permission(servicios_user, user.get("tipo_usuario", 1), clave_srv)
 
     if not tiene_permiso:
         return {

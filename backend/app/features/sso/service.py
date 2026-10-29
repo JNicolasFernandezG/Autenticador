@@ -82,7 +82,7 @@ async def consumir_ticket_sso(ticket_code: str, servicio_solicitante: str) -> Di
         )
 
     # Validar audiencia / servicio de destino
-    destino_asignado = ticket_doc.get("servicio_destino", "")
+    destino_asignado = (ticket_doc.get("servicio_destino") or "").strip().lower()
     if destino_asignado != clave_srv:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

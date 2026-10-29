@@ -25,7 +25,7 @@ class RegisterRequest(BaseModel):
     servicioOrigen: Optional[str] = Field(
         None,
         max_length=64,
-        description="Clave del servicio desde donde se registra (ej: mayoresactualizaciones, conmijuegos)",
+        description="Clave del servicio desde donde se registra (ej: mayoresactualizaciones, cognijuegos)",
     )
     servicios: Optional[Dict[str, bool]] = Field(
         None,
@@ -47,7 +47,7 @@ class LoginRequest(BaseModel):
     servicio: Optional[str] = Field(
         None,
         max_length=64,
-        description="Clave del servicio que solicita el login (ej: mayoresactualizaciones, conmijuegos)",
+        description="Clave del servicio que solicita el login (ej: mayoresactualizaciones, cognijuegos)",
     )
 
 
@@ -58,7 +58,7 @@ class VerificarTokenRequest(BaseModel):
     servicio: Optional[str] = Field(
         None,
         max_length=64,
-        description="Clave del servicio donde se abrió el Magic Link (ej: mayoresactualizaciones, conmijuegos)",
+        description="Clave del servicio donde se abrió el Magic Link (ej: mayoresactualizaciones, cognijuegos)",
     )
 
 
@@ -73,7 +73,7 @@ class ValidateServiceAccessRequest(BaseModel):
         ...,
         min_length=2,
         max_length=64,
-        description="Clave del servicio a validar (ej: mayoresactualizaciones, conmijuegos)",
+        description="Clave del servicio a validar (ej: mayoresactualizaciones, cognijuegos)",
     )
 
 

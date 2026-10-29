@@ -38,7 +38,7 @@ class CrearServicioCatalogoRequest(BaseModel):
         ...,
         min_length=2,
         max_length=64,
-        description="Clave única del servicio (ej: mayoresactualizaciones, conmijuegos)",
+        description="Clave única del servicio (ej: mayoresactualizaciones, cognijuegos)",
     )
     nombre: str = Field(..., min_length=2, max_length=100, description="Nombre visible del servicio")
     url_base: str = Field(

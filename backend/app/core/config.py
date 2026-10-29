@@ -25,9 +25,7 @@ class Settings:
     MAYORES_FRONTEND_URL: str = os.getenv(
         "MAYORES_FRONTEND_URL", "https://mayoresactualizaciones.asistodo.com.ar"
     ).rstrip("/")
-    CONMIJUEGOS_FRONTEND_URL: str = os.getenv(
-        "CONMIJUEGOS_FRONTEND_URL", "https://cognijuegos.asistodo.com.ar"
-    ).rstrip("/")
+    COGNIJUEGOS_FRONTEND_URL: str = os.getenv("COGNIJUEGOS_FRONTEND_URL", "https://cognijuegos.asistodo.com.ar").rstrip("/")
     CORS_ORIGINS: List[str] = [
         o.strip()
         for o in os.getenv(

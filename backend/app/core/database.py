@@ -111,10 +111,10 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
                 "activo": True,
             },
             {
-                "clave": "conmijuegos",
-                "nombre": "ConmiJuegos",
+                "clave": "cognijuegos",
+                "nombre": "CogniJuegos",
                 "descripcion": "Plataforma de entrenamiento cognitivo diario (Wordle, Sudoku, Sopa, Crucigrama)",
-                "url_base": settings.CONMIJUEGOS_FRONTEND_URL,
+                "url_base": settings.COGNIJUEGOS_FRONTEND_URL,
                 "ruta_magic_link": "/acceso",
                 "color": "teal",
                 "activo": True,
@@ -140,7 +140,7 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
         )
         await db["servicios_catalogo"].update_one(
             {
-                "clave": "conmijuegos",
+                "clave": "cognijuegos",
                 "$or": [
                     {"url_base": {"$exists": False}},
                     {"url_base": "http://localhost:5174"},
@@ -148,7 +148,7 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
             },
             {
                 "$set": {
-                    "url_base": settings.CONMIJUEGOS_FRONTEND_URL,
+                    "url_base": settings.COGNIJUEGOS_FRONTEND_URL,
                     "ruta_magic_link": "/acceso",
                 }
             },
@@ -179,7 +179,7 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
             "estado_codigo": "ACTIVO",
             "servicios": {
                 "mayoresactualizaciones": True,
-                "conmijuegos": True,
+                "cognijuegos": True,
             },
             "date_start": now,
             "date_end": None,
@@ -194,7 +194,7 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
             "estado_id": 2,
             "estado_codigo": "ACTIVO",
             "servicios.mayoresactualizaciones": True,
-            "servicios.conmijuegos": True,
+            "servicios.cognijuegos": True,
         }
         if admin_password:
             update_doc["password_hash"] = hash_password(admin_password.strip())

@@ -43,7 +43,7 @@ async def endpoint_register(req: RegisterRequest):
 @router.post(
     "/verificar-token",
     response_model=AuthResponse,
-    summary="Verifica el token JWT de un Magic Link (/acceso?token=...) al ingresar a MayoresActualizaciones o ConmiJuegos",
+    summary="Verifica el token JWT de un Magic Link (/acceso?token=...) al ingresar a MayoresActualizaciones o CogniJuegos",
 )
 async def endpoint_verificar_token(req: VerificarTokenRequest):
     return await verificar_token_magic_link(req)
@@ -52,7 +52,7 @@ async def endpoint_verificar_token(req: VerificarTokenRequest):
 @router.post(
     "/validar-acceso",
     response_model=AuthResponse,
-    summary="Verifica si un usuario existe, está activo y tiene permiso en un servicio (mayoresactualizaciones, conmijuegos, etc.)",
+    summary="Verifica si un usuario existe, está activo y tiene permiso en un servicio (mayoresactualizaciones, cognijuegos, etc.)",
 )
 async def endpoint_validar_acceso(req: ValidateServiceAccessRequest):
     return await validate_service_access(req)

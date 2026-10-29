@@ -153,8 +153,8 @@ async def get_servicios_catalogo() -> Dict[str, Any]:
     for d in docs:
         if d.get("clave") == "mayoresactualizaciones":
             d.setdefault("url_base", settings.MAYORES_FRONTEND_URL)
-        elif d.get("clave") == "conmijuegos":
-            d.setdefault("url_base", settings.CONMIJUEGOS_FRONTEND_URL)
+        elif d.get("clave") == "cognijuegos":
+            d.setdefault("url_base", settings.COGNIJUEGOS_FRONTEND_URL)
         else:
             d.setdefault("url_base", settings.FRONTEND_URL)
         d.setdefault("ruta_magic_link", "/acceso")
@@ -248,7 +248,7 @@ async def generar_magic_links_por_servicio(
     servicio_especifico: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Genera los Magic Links distintos para cada servicio registrado (mayoresactualizaciones, conmijuegos, etc.).
+    Genera los Magic Links distintos para cada servicio registrado (mayoresactualizaciones, cognijuegos, etc.).
     Cada Magic Link apunta a la URL de ese servicio + su ruta (/acceso?token=<JWT>) para que al abrirlo
     choque contra el autenticador de ese servicio e ingrese directo a su pantalla de inicio.
     """

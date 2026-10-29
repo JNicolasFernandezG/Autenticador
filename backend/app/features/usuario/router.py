@@ -51,7 +51,7 @@ async def endpoint_listar_usuarios(
     activo: Optional[bool] = Query(None, description="Filtro por cuenta activa/inactiva"),
     servicio: Optional[str] = Query(
         None,
-        description="Filtrar usuarios con permiso activo en una clave de servicio (ej: mayoresactualizaciones, conmijuegos)",
+        description="Filtrar usuarios con permiso activo en una clave de servicio (ej: mayoresactualizaciones, cognijuegos)",
     ),
     orden: str = Query("desc", pattern="^(asc|desc)$", description="Orden por fecha de alta"),
     admin: Dict[str, Any] = Depends(get_current_admin),
@@ -245,13 +245,13 @@ async def endpoint_crear_usuario(
 
 @router.post(
     "/{user_id}/magic-link",
-    summary="Generar Magic Links independientes por servicio (MayoresActualizaciones, ConmiJuegos, etc.)",
+    summary="Generar Magic Links independientes por servicio (MayoresActualizaciones, CogniJuegos, etc.)",
 )
 async def endpoint_generar_magic_link(
     user_id: int,
     servicio: Optional[str] = Query(
         None,
-        description="Opcional: clave del servicio (ej: mayoresactualizaciones o conmijuegos)",
+        description="Opcional: clave del servicio (ej: mayoresactualizaciones o cognijuegos)",
     ),
     admin: Dict[str, Any] = Depends(get_current_admin),
 ):
