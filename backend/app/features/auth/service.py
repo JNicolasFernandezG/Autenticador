@@ -59,6 +59,8 @@ def check_service_permission(servicios_user: Dict[str, Any], tipo_usuario: int, 
     if tipo_usuario == 2:
         return True
     clave = (clave_srv or "").strip().lower()
+    if clave in ("conmijuegos", "conmijuego"):
+        clave = "cognijuegos"
     return bool(servicios_user.get(clave, False))
 
 
@@ -190,6 +192,8 @@ async def authenticate_user(req: LoginRequest) -> Dict[str, Any]:
 
     if req.servicio and req.servicio.strip():
         clave_srv = req.servicio.strip().lower()
+        if clave_srv in ("conmijuegos", "conmijuego"):
+            clave_srv = "cognijuegos"
         servicios_user = user.get("servicios") or {}
         if not check_service_permission(servicios_user, user.get("tipo_usuario", 1), clave_srv):
             raise HTTPException(
@@ -296,6 +300,8 @@ async def validate_service_access(req: ValidateServiceAccessRequest) -> Dict[str
         }
 
     clave_srv = req.servicio.strip().lower()
+    if clave_srv in ("conmijuegos", "conmijuego"):
+        clave_srv = "cognijuegos"
     servicios_user = user.get("servicios") or {}
     tiene_permiso = check_service_permission(servicios_user, user.get("tipo_usuario", 1), clave_srv)
 
@@ -334,6 +340,8 @@ async def dar_baja_usuario_servicio(req: BajaServicioRequest) -> Dict[str, Any]:
 
     if req.servicio and req.servicio.strip():
         clave_srv = req.servicio.strip().lower()
+        if clave_srv in ("conmijuegos", "conmijuego"):
+            clave_srv = "cognijuegos"
         servicios_user = user.get("servicios") or {}
         servicios_user[clave_srv] = False
         await db["usuarios"].update_one(
