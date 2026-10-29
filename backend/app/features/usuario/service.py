@@ -148,7 +148,7 @@ async def toggle_servicio_usuario(user_id: int, servicio_clave: str) -> Dict[str
 
 async def get_servicios_catalogo() -> Dict[str, Any]:
     db = get_database()
-    cursor = db["servicios_catalogo"].find({"clave": {"$ne": "conmijuegos"}}, {"_id": 0}).sort("clave", ASCENDING)
+    cursor = db["servicios_catalogo"].find({}, {"_id": 0}).sort("clave", ASCENDING)
     docs = await cursor.to_list(length=100)
     for d in docs:
         if d.get("clave") == "mayoresactualizaciones":

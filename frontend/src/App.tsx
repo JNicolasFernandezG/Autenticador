@@ -179,8 +179,7 @@ export default function App() {
         api.getServiciosCatalogo(token),
         api.getEstadosCatalogo(token),
       ]);
-      const srvLimpios = (srvRes.servicios || []).filter((s: ServicioCatalogo) => s.clave !== 'conmijuegos');
-      setServiciosCatalogo(srvLimpios);
+      setServiciosCatalogo(srvRes.servicios || []);
       setEstadosCatalogo(estRes.estados);
     } catch (err: any) {
       if (String(err.message).includes('401') || String(err.message).includes('expirado')) {
@@ -471,10 +470,9 @@ export default function App() {
     );
   }
 
-  const catalogoLimpio = serviciosCatalogo.filter((s) => s.clave !== 'conmijuegos');
   const clavesServicios: ServicioCatalogo[] =
-    catalogoLimpio.length > 0
-      ? catalogoLimpio
+    serviciosCatalogo.length > 0
+      ? serviciosCatalogo
       : [
           {
             clave: 'mayoresactualizaciones',
