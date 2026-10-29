@@ -97,62 +97,62 @@ async def seed_initial_data(db: AsyncIOMotorDatabase) -> None:
         ]
         await db["estados_usuario"].insert_many(estados_iniciales)
 
-    # 2. Seed catálogo de servicios conectados al Autenticador (con URL base para Magic Links independientes)
-    servicios_count = await db["servicios_catalogo"].count_documents({})
-    if servicios_count == 0:
-        servicios_iniciales = [
-            {
-                "clave": "mayoresactualizaciones",
-                "nombre": "Mayores Actualizaciones",
-                "descripcion": "Plataforma principal de cursos y actualizaciones (SIPI)",
-                "url_base": settings.MAYORES_FRONTEND_URL,
-                "ruta_magic_link": "/acceso",
-                "color": "indigo",
-                "activo": True,
-            },
-            {
-                "clave": "cognijuegos",
-                "nombre": "CogniJuegos",
-                "descripcion": "Plataforma de entrenamiento cognitivo diario (Wordle, Sudoku, Sopa, Crucigrama)",
-                "url_base": settings.COGNIJUEGOS_FRONTEND_URL,
-                "ruta_magic_link": "/acceso",
-                "color": "teal",
-                "activo": True,
-            },
-        ]
-        await db["servicios_catalogo"].insert_many(servicios_iniciales)
-    else:
-        # Sincronizar url_base desde las variables de entorno (.env) si tenían el valor local por defecto o no existían
+    # 2. Migración y Seed de catálogo de servicios conectados al Autenticador
+    # Paso A: Eliminar definitivamente cualquier registro obsoleto o erróneo de 'conmijuegos'
+    await db["servicios_catalogo"].delete_many({"clave": "conmijuegos"})
+
+    # Paso B: Garantizar que existan y estén actualizados los servicios oficiales
+    servicios_oficiales = [
+        {
+            "clave": "mayoresactualizaciones",
+            "nombre": "Mayores Actualizaciones",
+            "descripcion": "Plataforma principal de cursos y actualizaciones (SIPI)",
+            "url_base": settings.MAYORES_FRONTEND_URL,
+            "ruta_magic_link": "/acceso",
+            "color": "indigo",
+            "activo": True,
+        },
+        {
+            "clave": "cognijuegos",
+            "nombre": "CogniJuegos",
+            "descripcion": "Plataforma de entrenamiento cognitivo diario (Wordle, Sudoku, Sopa, Crucigrama)",
+            "url_base": settings.COGNIJUEGOS_FRONTEND_URL,
+            "ruta_magic_link": "/acceso",
+            "color": "teal",
+            "activo": True,
+        },
+    ]
+
+    for srv in servicios_oficiales:
         await db["servicios_catalogo"].update_one(
-            {
-                "clave": "mayoresactualizaciones",
-                "$or": [
-                    {"url_base": {"$exists": False}},
-                    {"url_base": "http://localhost:3000"},
-                ],
-            },
-            {
-                "$set": {
-                    "url_base": settings.MAYORES_FRONTEND_URL,
-                    "ruta_magic_link": "/acceso",
-                }
-            },
+            {"clave": srv["clave"]},
+            {"$set": srv},
+            upsert=True,
         )
-        await db["servicios_catalogo"].update_one(
-            {
-                "clave": "cognijuegos",
-                "$or": [
-                    {"url_base": {"$exists": False}},
-                    {"url_base": "http://localhost:5174"},
-                ],
-            },
-            {
-                "$set": {
-                    "url_base": settings.COGNIJUEGOS_FRONTEND_URL,
-                    "ruta_magic_link": "/acceso",
-                }
-            },
+
+    # Paso C: Migrar usuarios existentes con 'servicios.conmijuegos' hacia 'servicios.cognijuegos'
+    cursor_conmi = db["usuarios"].find({"servicios.conmijuegos": {"$exists": True}})
+    async for u in cursor_conmi:
+        servicios = dict(u.get("servicios") or {})
+        val = servicios.pop("conmijuegos", False)
+        if "cognijuegos" not in servicios:
+            servicios["cognijuegos"] = bool(val)
+        await db["usuarios"].update_one(
+            {"_id": u["_id"]},
+            {"$set": {"servicios": servicios}},
         )
+
+    # Eliminar permanentemente la clave 'servicios.conmijuegos' en cualquier usuario residual
+    await db["usuarios"].update_many(
+        {"servicios.conmijuegos": {"$exists": True}},
+        {"$unset": {"servicios.conmijuegos": ""}},
+    )
+
+    # Asegurar que todos los usuarios tengan 'servicios.cognijuegos' definido
+    await db["usuarios"].update_many(
+        {"servicios.cognijuegos": {"$exists": False}},
+        {"$set": {"servicios.cognijuegos": False}},
+    )
 
     # Limpiar campo obsoleto `black` si existía en documentos previos
     await db["usuarios"].update_many({"black": {"$exists": True}}, {"$unset": {"black": ""}})
